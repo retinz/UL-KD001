@@ -1,0 +1,27 @@
+# R specific
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Specific files
+anonymiser.R
+bryant_preprocessing.R
+
+# File extensions to ignore
+*.RData
+*.xlsx
+*.csv
+*.zip
+*.jpg
+*.Rproj
+
+# Directories 
+original_pipe/
+ketones_plots/
+UL-KD001_data/
+charts/
+code_inspiration/
+plots/
+tables/
+
