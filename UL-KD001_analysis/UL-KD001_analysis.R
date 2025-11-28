@@ -3818,7 +3818,7 @@ gg_switcher_change <- ggplot(ts_agg_er_wide, aes(x = group,
   scale_fill_manual(values = pal) +
   scale_colour_manual(values = pal, guide = 'none') +
   labs(x = 'Group',
-       y = 'Switch Cost Change Score (Accuracy)',
+       y = 'Switch Cost Change Score (Accuracy: p.p.)',
        fill = 'Group') +
   scale_x_discrete(labels = c('Clean Diet', 'Ketogenic Diet')) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
