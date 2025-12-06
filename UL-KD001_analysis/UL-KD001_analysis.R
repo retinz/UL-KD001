@@ -3,11 +3,6 @@
 
 # Analysing UL-KD001 data. 
 
-# TASKS #
-# ===================== #
-
-# - Mediation
-
 # NOTES #
 # ===================== #
 
@@ -9244,11 +9239,31 @@ bwtrim_list <- list(
   BDI = BDI_tranova
 )
 
+# GROUP ONLY #
+# ====================== #
+
+# Apply extraction function
+effects_trimmed_group <- imap(bwtrim_list, ~ {
+  df <- tidy_WRS2(.x,
+                  lab_key,
+                  p.adjust = FALSE)
+  df[['response']] <- .y 
+  df
+}) %>%
+  list_rbind() %>%
+  relocate(response) %>%
+  mutate(across(c(statistic, p.value), ~ round(.x, 3))) %>%
+  # Select only main effect of session
+  filter(term == 'group') %>%
+  # Adjust p-values
+  mutate(p.adj = p.adjust(p.value, 'BH'))
+effects_trimmed_group
+
 # SESSION ONLY #
 # ====================== #
 
 # Apply extraction function
-effects_trimmed <- imap(bwtrim_list, ~ {
+effects_trimmed_session <- imap(bwtrim_list, ~ {
   df <- tidy_WRS2(.x,
             lab_key,
             p.adjust = FALSE)
@@ -9260,20 +9275,15 @@ effects_trimmed <- imap(bwtrim_list, ~ {
   mutate(across(c(statistic, p.value), ~ round(.x, 3))) %>%
   # Select only main effect of session
   filter(term == 'session') %>%
-  # Remove ASRS as it had an interaction
-  filter(response != 'ASRS') %>%
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH'))
-effects_trimmed
+effects_trimmed_session
 
-# SESSION + INT ONLY #
-# ====================== #
-
-# Trimmed ANOVA ASRS #
-# ----------------------- #
+# INT ONLY #
+# ======================== #
 
 # Apply extraction function
-effects_trimmed_sessint <- imap(bwtrim_list, ~ {
+effects_trimmed_int <- imap(bwtrim_list, ~ {
   df <- tidy_WRS2(.x,
                   lab_key,
                   p.adjust = FALSE)
@@ -9282,14 +9292,11 @@ effects_trimmed_sessint <- imap(bwtrim_list, ~ {
 }) %>%
   list_rbind() %>%
   relocate(response) %>%
-  # Select main effect of session and interaction
-  filter(term == 'session' | (response == 'ASRS' & term == 'group:session')) %>%
-  # Remove ASRS Session as there was an ASRS interaction
-  filter(!(response == 'ASRS' & term == 'session')) %>%
+  filter(term == 'group:session') %>%
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH')) %>%
   mutate(across(c(statistic, p.value, p.adj), ~ round(.x, 3)))
-effects_trimmed_sessint
+print(effects_trimmed_int, n = Inf)
 
 # Trimmed change scores ASRS #
 # -------------------------------- #
@@ -9305,9 +9312,7 @@ effects_trimmed_sesschange <- imap(bwtrim_list, ~ {
   list_rbind() %>%
   relocate(response) %>%
   # Select only main effect of session
-  filter(term == 'session' | (response == 'ASRS' & term == 'group:session')) %>%
-  # Remove ASRS Session as there was an ASRS interaction
-  filter(!(response == 'ASRS' & term == 'session')) %>%
+  filter(term == 'group:session') %>%
   # Case-specific adjustment 
   mutate(
     statistic = case_when(
@@ -9347,11 +9352,30 @@ conventional_list <- list(
   BDI = BDI_anova
 )
 
-# SESSION ONLY #
+# GROUP #
 # ====================== #
 
 # Apply extraction function
-effects_conventional <- imap(conventional_list, 
+effects_conventional_group <- imap(conventional_list, 
+                                  ~ {
+                                    df <- suppressWarnings(tidy(.x$anova_table))
+                                    df[['response']] <- .y 
+                                    df
+                                  }) %>%
+  list_rbind() %>%
+  relocate(response) %>%
+  mutate(across(c(statistic, pes, p.value), ~ round(.x, 3))) %>%
+  # Select only main effect of session
+  filter(term == 'group') %>%
+  # Adjust p-values
+  mutate(p.adj = p.adjust(p.value, 'BH'))
+print(effects_conventional_group, n = Inf)
+
+# SESSION #
+# ====================== #
+
+# Apply extraction function
+effects_conventional_sess <- imap(conventional_list, 
                              ~ {
                                df <- suppressWarnings(tidy(.x$anova_table))
                                df[['response']] <- .y 
@@ -9364,4 +9388,23 @@ effects_conventional <- imap(conventional_list,
   filter(term == 'session') %>%
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH'))
-effects_conventional
+print(effects_conventional_sess, n = Inf)
+
+# INT #
+# ====================== #
+
+# Apply extraction function
+effects_conventional_int <- imap(conventional_list, 
+                             ~ {
+                               df <- suppressWarnings(tidy(.x$anova_table))
+                               df[['response']] <- .y 
+                               df
+                             }) %>%
+  list_rbind() %>%
+  relocate(response) %>%
+  mutate(across(c(statistic, pes, p.value), ~ round(.x, 3))) %>%
+  # Select only interaction
+  filter(term == 'group:session') %>%
+  # Adjust p-values
+  mutate(p.adj = p.adjust(p.value, 'BH'))
+print(effects_conventional_int, n = Inf)
