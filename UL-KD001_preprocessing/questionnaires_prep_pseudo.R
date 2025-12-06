@@ -10,13 +10,15 @@
 # - Add the calculation of the no. of participants who finished pretest
 # - Adjust the loading of the RDS from this script to taskswitch_prep
 
+# - Check if the above has been done
+# - Adjust data loading (using here())
+
 # NOTES 
 # ===================== #
 
 # - Only the KD April 2024 cohort has ketone values from before Pretest. There are
 # only 2 missing values for 2 different individuals --> no need to filter based 
-# on missingness. 
-# But the missing values are imputed. 
+# on missingness. But the missing values are imputed. 
 
 # - CD have some additional columns. Some of the additional columns were assessed 
 # but eventually removed for convenience. They also have only 15 (intervention / posttest) ketone
@@ -38,26 +40,27 @@
 # LIBRARIES #
 # ===================== #
 
+library(here)
 library(zoo)
 library(readxl)
 library(writexl)
 library(ggplot2)
 library(tidyverse)
-source('../UL-KD001_analysis/analysis_helpers.R')
+source(here('UL-KD001_analysis', 'analysis_helpers.R'))
 
-# SESSION SETTINGS #
+# PATHS #
 # ===================== #
 
-# Default directory for plots
-plot_directory <- './ketones_plots'
+# Data path
+data_path <- here('UL-KD001_data', 'LBI_raw', 'raw_pseudoanonym')
+
+# Plots path
+plot_directory <- here('UL-KD001_analysis', 'plots')
 if (!dir.exists(plot_directory)) {
   dir.create(plot_directory, recursive = TRUE)
 }
 
 # LOAD PSEUDO-ANONYMISED DATA ----------------------------------
-
-# Temporarily alter directory
-setwd('~/UL-KD001/UL-KD001_data/LBI_raw/raw_pseudoanonym')
 
 # KD Apr 2024 #
 # --------------- #
