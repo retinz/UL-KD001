@@ -1,4 +1,10 @@
-# DESCRIPTION OF MAIN DIRECTORY OF UL-KD001
+# UL-KD001 STUDY
+
+This project contains files used for preprocessing and analysing data of 
+a nonrandomised controlled trial, comparing a ketogenic diet with a clean diet
+in terms of mood, sleep, ADHD symptoms, and cognitive performance. 
+
+This study was carried out by the LBI research group at Leiden University. 
 
 This directory is the root of the project. This is also marked by the '.here'
 file, which indicates to R (package 'here') that this is the root (main) directory. 
