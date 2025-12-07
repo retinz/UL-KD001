@@ -16,7 +16,5 @@ file, which indicates to R (package 'here') that this is the root (main) directo
 - UL-KD001_analysis: houses all relevant files for analysing UL-KD001 data; 
 assumes preprocessed data
 
-- UL-KD001_data: contains the pseudo-anonymised raw data and the preprocessed data
-
 - UL-KD001_preprocessing: contains relevant files for preprocessing pseudo-anonymised
 UL-KD001 raw data
