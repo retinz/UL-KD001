@@ -60,45 +60,45 @@ if (!dir.exists(plot_directory)) {
   dir.create(plot_directory, recursive = TRUE)
 }
 
+# Preprocessing directory
+prep_directory <- here('UL-KD001_preprocessing')
+
 # LOAD PSEUDO-ANONYMISED DATA ----------------------------------
 
 # KD Apr 2024 #
 # --------------- #
 
-kd_apr_24_pre <- read.csv('kd_apr_24_pre.csv')
-kd_apr_24_post <- read.csv('kd_apr_24_post.csv') %>% 
+kd_apr_24_pre <- read.csv(file.path(data_path, 'kd_apr_24_pre.csv'))
+kd_apr_24_post <- read.csv(file.path(data_path,'kd_apr_24_post.csv')) %>% 
   relocate(participant_id, EndDate, Finished, Q75, Q74.1)
 
 # KD Sep 2024 #
 # --------------- #
 
-kd_sep_24_pre <- read.csv('kd_sep_24_pre.csv') %>%
+kd_sep_24_pre <- read.csv(file.path(data_path,'kd_sep_24_pre.csv')) %>%
   relocate(participant_id, EndDate, Finished, Q75, Q74.1)
-kd_sep_24_post <- read.csv('kd_sep_24_post.csv') %>%
+kd_sep_24_post <- read.csv(file.path(data_path,'kd_sep_24_post.csv')) %>%
   relocate(participant_id, Finished, EndDate, Q75, Q74.1)
 
 # KD Jan 2025 #
 # --------------- #
 
-kd_jan_25_pre <- read.csv('kd_jan_25_pre.csv') %>%
+kd_jan_25_pre <- read.csv(file.path(data_path,'kd_jan_25_pre.csv')) %>%
   relocate(participant_id, EndDate, Finished, Q75, Q74.1)
-kd_jan_25_post <- read.csv('kd_jan_25_post.csv') %>%
+kd_jan_25_post <- read.csv(file.path(data_path,'kd_jan_25_post.csv')) %>%
   relocate(participant_id, Finished, EndDate, Q75, Q74.1)
 
 # CD 2025 #
 # -------------- #
 
-cd_25_pre <- read.csv('cd_25_pre.csv') %>%
+cd_25_pre <- read.csv(file.path(data_path,'cd_25_pre.csv')) %>%
   relocate(participant_id, EndDate, Finished, Q75, Q74.1)
-cd_25_post <- read.csv('cd_25_post.csv') %>%
+cd_25_post <- read.csv(file.path(data_path,'cd_25_post.csv')) %>%
   relocate(participant_id, Finished, EndDate, Q74.1)
-cd_25_post_ketones <- read.csv('cd_25_post_ketones.csv') %>%
+cd_25_post_ketones <- read.csv(file.path(data_path,'cd_25_post_ketones.csv')) %>%
   relocate(participant_id, Finished, Q2)
 
 # CODEBOOKS ----------------------------
-
-# Set the directory back
-setwd('~/UL-KD001/UL-KD001_preprocessing')
 
 # Function to create a codebook from the first two rows of a dataframe
 make_BOOK <- function(df) {
@@ -150,13 +150,9 @@ var_diffs <- pairs %>%
 
 # Save the codebooks to Excel
 imap(books,
-     ~ write_xlsx(.x, paste0(.y, '.xlsx')))
+     ~ write_xlsx(.x, file.path(prep_directory, paste0(.y, '.xlsx'))))
 
 # PREPROCESSING KD APRIL 2024 ---------------------------------
-
-# Set the directory back
-setwd('~/UL-KD001/UL-KD001_preprocessing')
-
 # - Pretest cleaning ---------------------------------
 
 kd_apr_24_pre_CLEAN <- kd_apr_24_pre %>%
@@ -169,7 +165,7 @@ kd_apr_24_pre_CLEAN <- kd_apr_24_pre %>%
     weight = as.numeric(Q73.1),  # Ensure weight is numeric
     height = as.numeric(Q74.1) / 100,  # Convert height from cm to meters
     
-    # Correct weight values - weight in KG
+    # Correct weight values --> weight in KG
     weight = case_when(
       !is.na(weight) & abs(weight) > 200 & nchar(as.character(round(weight))) > 2 ~ 
         weight / (10^(nchar(as.character(round(weight))) - 2)),  
@@ -213,7 +209,7 @@ kd_apr_24_pre_CLEAN <- kd_apr_24_pre %>%
     # Make age numeric
     age = as.numeric(age),
     
-    # Convert 'Finished' column from text to logical
+    # Convert 'finished' column from text to logical
     finished = case_when(
       finished == 'True' ~ TRUE,
       finished == 'False' ~ FALSE,
@@ -348,6 +344,7 @@ kd_apr_24_combined <- right_join(
                   )
                 })) %>%
   mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
+  
   # Adding metadata
   mutate(age = as.numeric(age), 
          group = 'KD',
@@ -409,10 +406,11 @@ missing_post_ketones_apr24
 
 # _int_ ~ interpolated
 
-# 1. Identify your ketone columns
+# 1. Identify ketone columns
 ketone_apr24_cols_pre <- grep('^ketones_\\d+_pre$', names(kd_apr_24_CLEAN), value = TRUE)
 
 ketones_apr24_imputed_pre <- kd_apr_24_CLEAN %>%
+  
   # Make sure columns are numeric
   mutate(across(all_of(ketone_apr24_cols_pre), as.numeric)) %>%
   
@@ -426,9 +424,14 @@ ketones_apr24_imputed_pre <- kd_apr_24_CLEAN %>%
       
       # If they're all NA, return them as-is instead of NULL
       if (all(is.na(row_vals))) {
+        
         row_vals
+        
       } else {
+        
         # Interpolate missing values across that row of ketones
+        ## Rule = 2 ~ interpolate both leading and trailing NAs
+        ## Rule = 1 ~ don't interpolate either leading or trailing NAs
         as.numeric(na.approx(row_vals, na.rm = FALSE, rule = 2))
       }
     })
@@ -452,7 +455,7 @@ ketones_apr24_imputed_pre <- kd_apr_24_CLEAN %>%
 # -- Max. 2 / 7 measurements can be missing if measurement 16 is missing (and if that's allowed)
 
 # Imputation:
-# - Linear interpolation across rows over max. 1 cell
+# - Linear interpolation in rows over max. 1 cell
 # - Trailing NAs interpolated only when posttest_date > 2024-05-04 & posttest_date < 2024-05-07 (5 or 6 May)
 # - Leading NAs interpolated
 
@@ -565,7 +568,7 @@ ketones_apr24_imputed_post <- kd_apr_24_CLEAN %>%
   # Unnest the interpolated values into new columns
   unnest_wider(ketones_post_int, names_sep = '_') %>%
   
-  # Remove the temporary flag we added
+  # Remove the temporary flag
   select(-date_in_range)
 
 # Checking the effects of posttest ketones imputation and filtering based on missingness
@@ -582,7 +585,9 @@ kd_apr_24_FINAL <- kd_apr_24_CLEAN %>%
   # Remove old ketone columns
   select(-matches('^ketones_\\d+_(pre|post)$')) %>%
   # Add imputed pretest ketones
-  right_join(ketones_apr24_imputed_pre %>% select(participant_id, ketones_pre, matches('^ketones_pre_int_\\d+$')), by = 'participant_id') %>%
+  right_join(ketones_apr24_imputed_pre %>% select(participant_id, ketones_pre,
+                                                  matches('^ketones_pre_int_\\d+$')),
+             by = 'participant_id') %>%
   # Add imputed posttest ketones; imputed dataset excluded participants 
   # based on ketone missingness --> right join
   right_join(ketones_apr24_imputed_post %>% select(participant_id, matches('^ketones_post_int_\\d+$')), 
@@ -600,8 +605,8 @@ kd_sep_24_pre_CLEAN <- kd_sep_24_pre %>%
   
   # Convert key columns
   mutate(
-    weight = as.numeric(Q73.1),  # Ensure weight is numeric
-    height = as.numeric(Q74.1) / 100,  # Convert height from cm to meters
+    weight = as.numeric(Q73.1), # Ensure weight is numeric
+    height = as.numeric(Q74.1) / 100, # Convert height from cm to meters
     
     # Correct weight values - weight in KG
     weight = case_when(
@@ -835,6 +840,7 @@ missing_post_ketones_sep24
 # - Imputing ketones POST ----------------------------------
 
 # POST ~ intervention ketones
+# _int ~ interpolated values
 
 # Filter:
 # - Last measurement (16) can be missing but is not interpolated; exception to no interpolation being 
@@ -844,7 +850,7 @@ missing_post_ketones_sep24
 # - Max. 2 / 7 measurements can be missing if measurement 16 is missing (allowed by default)
 
 # Imputation:
-# - Linear interpolation across rows over max. 1 cell
+# - Linear interpolation in rows over max. 1 cell
 # - Trailing NAs not interpolated unless posttest_date > 2024-10-11
 # - Leading NAs interpolated
 
