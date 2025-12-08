@@ -1209,7 +1209,7 @@ missing_post_ketones_jan25
 # - Max. 2 / 7 measurements can be missing if measurement 16 is missing (allowed by default)
 
 # Imputation:
-# - Linear interpolation across rows over max. 1 cell
+# - Linear interpolation in rows over max. 1 cell
 # - Trailing NAs not interpolated unless posttest_date > 2025-02-14
 # - Leading NAs interpolated
 
@@ -1295,6 +1295,7 @@ kd_jan_25_FINAL <- kd_jan_25_CLEAN %>%
   right_join(ketones_jan25_imputed_post %>% select(participant_id, matches('^ketones_post_int_\\d+$')), 
              by = 'participant_id')
 glimpse(kd_jan_25_FINAL)
+
 # PREPROCESSING CD 2025 -------------------------------
 # - Pretest cleaning ---------------------------------
 
@@ -1456,6 +1457,7 @@ cd_25_post_CLEAN <- cd_25_post %>%
          foodlog_vegetables = Q80_12,
          foodlog_complex_starches = Q80_14
          ) %>%
+  # Substitute any NAs with 0
   mutate(across(starts_with('foodlog_'),
                 ~ coalesce(parse_number(.x), 0)))
 
@@ -1478,6 +1480,9 @@ cd_25_post_FRESH <- cd_25_post_CLEAN %>%
   setdiff(duplicates_cd25_post)  # Exclude duplicates from posttest
 
 # - Posttest ketone values cleaning --------------------------
+
+# This is an extra step for CD 2025 because ketones were recorded 
+# separately from the usual questions in this cohort
 
 cd_25_post_ketones_CLEAN <- cd_25_post_ketones %>%
   
@@ -1592,6 +1597,7 @@ glimpse(cd_25_combined)
 # - weight ~ in kg
 # - height ~ in metres
 # - ketones ~ in mmol/L
+
 # FILTERING CD 2025 & IMPUTATION ---------------------------
 
 # FILTERED DATASET (basic exclusions made) #
@@ -1619,6 +1625,29 @@ cd_25_CLEAN <- cd_25_combined %>%
   filter(normal_diet_score > keto_score) %>%
   select(-c(normal_diet_score, keto_score), -c(starts_with('foodlog_')))
 glimpse(cd_25_CLEAN)
+
+# Check if anyone gets filtered out because of the diet filter
+cd_25_combined %>%
+  filter(finished_pre, finished_post, finished_ketones, measured_ketones_post) %>%
+  filter(BMI_pre >= 18.5 & BMI_pre < 30,
+         sex == 'female',
+         age >= 35 & age <= 45,
+  ) %>%
+  # Exclude Paleo and Low carb diets
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
+  arrange(participant_id) %>%
+  select(-c(finished_ketones)) %>%
+  # Exclude based on food log
+  group_by(participant_id) %>%
+  mutate(normal_diet_score = sum(foodlog_starches, foodlog_bread, foodlog_sweetpotatoe, 
+                                 foodlog_dairy, foodlog_sweeteners, 
+                                 foodlog_legumes, foodlog_meat, foodlog_berries, 
+                                 foodlog_fruit, foodlog_greens, foodlog_vegetables,
+                                 foodlog_complex_starches),
+         keto_score = sum(foodlog_fats, foodlog_dairy)) %>%
+  ungroup() %>%
+  filter(!(normal_diet_score > keto_score)) %>%
+  nrow()
 
 # - Ketone missingness checks -------------------------------
 
@@ -1758,9 +1787,6 @@ dataset_start <- bind_rows(
   select(-c(pretest_time, posttest_time, Q95, Q94_1))
 glimpse(dataset_start)
 
-# Remove tibbles with sensitive information
-rm(kd_apr_24_post, kd_sep_24_post, kd_jan_25_post, cd_25_post)
-
 # - Filter based on diet text -----------------------------
 
 # Get unique current diet text
@@ -1784,6 +1810,7 @@ dataset_diettext <- dataset_start %>%
 
 dataset_ketout <- dataset_diettext %>%
   rowwise() %>% # Operate one row at a time
+  # Get the last actual value, not NA
   mutate(last_ketones_post_int =
            last(na.omit(c_across(starts_with('ketones_post_int_'))))) %>%
   ungroup() %>%
@@ -1815,7 +1842,7 @@ dataset_ketout <- dataset_diettext %>%
       na.rm = TRUE # NA ≡ no failure
     ) <= 1) 
     
-    | 
+    | # OR
       
     (group == 'CD' & # CD cohort
        rowSums( # How many fail?
@@ -1926,12 +1953,14 @@ CD_post_check_3
 
 # Pretest before filtering
 count_kd_apr_24_pre <- kd_apr_24_pre_FRESH %>%
+  filter(finished) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
 
 # Posttest before filtering
 count_kd_apr_24_post <- kd_apr_24_combined %>%
+  filter(finished_pre, finished_post) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
@@ -1951,12 +1980,14 @@ cat('KD April 24: Final no. of participants =', count_kd_apr_24_final, '\n')
 
 # Pretest before filtering
 count_kd_sep_24_pre <- kd_sep_24_pre_FRESH %>%
+  filter(finished) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
 
 # Posttest before filtering
 count_kd_sep_24_post <- kd_sep_24_combined %>%
+  filter(finished_pre, finished_post) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
@@ -1976,12 +2007,14 @@ cat('KD September 24: Final no. of participants =', count_kd_sep_24_final, '\n')
 
 # Pretest before filtering
 count_kd_jan_25_pre <- kd_jan_25_pre_FRESH %>%
+  filter(finished) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
 
 # Posttest before filtering
 count_kd_jan_25_post <- kd_jan_25_combined %>%
+  filter(finished_pre, finished_post) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
@@ -2001,12 +2034,14 @@ cat('KD January 25: Final no. of participants =', count_kd_jan_25_final, '\n')
 
 # Pretest before filtering
 count_cd_25_pre <- cd_25_pre_FRESH %>%
+  filter(finished) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
 
 # Posttest before filtering
 count_cd_25_post <- cd_25_combined %>%
+  filter(finished_pre, finished_post) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
@@ -2026,17 +2061,40 @@ cat('CD 2025: Final no. of participants =', count_cd_25_final, '\n')
 # General overview #
 # ============================ #
 
-pretest_total_count <- sum(count_kd_apr_24_pre, count_kd_sep_24_pre, 
-                           count_kd_jan_25_pre, count_cd_25_pre)
-posttest_total_count <- sum(count_kd_apr_24_post, count_kd_sep_24_post, 
-                        count_kd_jan_25_post, count_cd_25_post)
-final_total_count <- sum(count_kd_apr_24_final, count_kd_sep_24_final, 
-                        count_kd_jan_25_final, count_cd_25_final)
+# Total number of participants who finished Pretest
+pretest_total_count <- tibble(
+  count = c(sum(count_kd_apr_24_pre, count_kd_sep_24_pre,
+                count_kd_jan_25_pre), count_cd_25_pre),
+  group = c('KD', 'CD')
+  )
+pretest_total_count
 
-cat('Total number of participants who began Pretest =', pretest_total_count, '\n')
-cat('Total number of participants at Posttest =', posttest_total_count, '\n')
-cat('Total number of participants after filtering =', final_total_count, '\n')
-cat('Participant loss =', posttest_total_count - final_total_count, '\n')
+# Total number of participants who finished Posttest
+posttest_total_count <- tibble(
+  count = c(sum(count_kd_apr_24_post, count_kd_sep_24_post,
+                count_kd_jan_25_post), count_cd_25_post),
+  group = c('KD', 'CD')
+)
+posttest_total_count
+
+# Total number of participants after filtering
+final_total_count <- tibble(
+  count = c(sum(count_kd_apr_24_final, count_kd_sep_24_final,
+                count_kd_jan_25_final), count_cd_25_final),
+  group = c('KD', 'CD'))
+final_total_count
+
+# Participant loss
+participant_loss <- tibble(
+  count = c(sum(count_kd_apr_24_pre, count_kd_sep_24_pre,
+                                             count_kd_jan_25_pre) -
+              sum(count_kd_apr_24_final, count_kd_sep_24_final,
+                  count_kd_jan_25_final),
+            count_cd_25_pre - count_cd_25_final
+            ),
+  group = c('KD', 'CD')
+)
+participant_loss
 
 # Detailed accounting #
 # ============================ #
@@ -2047,25 +2105,33 @@ unfiltered_datasets <- bind_rows(
   kd_sep_24_combined,
   kd_jan_25_combined,
   cd_25_combined
-) %>%
-  filter(!(participant_id == '' | participant_id == ' ')) 
+) %>% filter(!(participant_id == '' | participant_id == ' '))
 
-# Count before filtering
-unfiltered_count <- unfiltered_datasets %>%
+# Finished both Pretest and Posttest
+finished <- unfiltered_datasets %>%
+  filter(
+    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
+       finished_pre & finished_post) |
+      (cohort == 'cd_25' &
+         finished_pre & finished_post)
+  ) %>%
   count(group) %>%
   ungroup() %>%
   as_tibble()
 
-# Finished and measured ketones filters
-finished_measured <- unfiltered_datasets %>%
+# Measured ketones
+measured_ketones <- unfiltered_datasets %>%
   filter(
     (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       finished_pre & finished_post &
-       measured_ketones_pre & measured_ketones_post) |
+       finished_pre & finished_post) |
       (cohort == 'cd_25' &
-         finished_pre & finished_post &
-         measured_ketones_post)
+         finished_pre & finished_post)
   ) %>%
+  filter(
+    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
+       measured_ketones_pre & measured_ketones_post) |
+      (cohort == 'cd_25' & measured_ketones_post)
+  ) %>% 
   count(group) %>%
   ungroup() %>%
   as_tibble()
@@ -2075,12 +2141,15 @@ BMI_filter <- unfiltered_datasets %>%
   # Finished, measured filter
   filter(
     (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       finished_pre & finished_post &
-       measured_ketones_pre & measured_ketones_post) |
+       finished_pre & finished_post) |
       (cohort == 'cd_25' &
-         finished_pre & finished_post &
-         measured_ketones_post)
+         finished_pre & finished_post)
   ) %>%
+  filter(
+    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
+       measured_ketones_pre & measured_ketones_post) |
+      (cohort == 'cd_25' & measured_ketones_post)
+  ) %>% 
   # BMI filter
   filter(BMI_pre >= 18.5 & BMI_pre < 30) %>%
   count(group) %>%
@@ -2092,12 +2161,15 @@ sexage_filter <- unfiltered_datasets %>%
   # Finished, measured filter
   filter(
     (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       finished_pre & finished_post &
-       measured_ketones_pre & measured_ketones_post) |
+       finished_pre & finished_post) |
       (cohort == 'cd_25' &
-         finished_pre & finished_post &
-         measured_ketones_post)
+         finished_pre & finished_post)
   ) %>%
+  filter(
+    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
+       measured_ketones_pre & measured_ketones_post) |
+      (cohort == 'cd_25' & measured_ketones_post)
+  ) %>% 
   # BMI filter
   filter(BMI_pre >= 18.5 & BMI_pre < 30) %>%
   # Sex filter 
@@ -2111,15 +2183,18 @@ diet_filters <- unfiltered_datasets %>%
   # Finished, measured filter
   filter(
     (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       finished_pre & finished_post &
-       measured_ketones_pre & measured_ketones_post) |
+       finished_pre & finished_post) |
       (cohort == 'cd_25' &
-         finished_pre & finished_post &
-         measured_ketones_post)
+         finished_pre & finished_post)
   ) %>%
+  filter(
+    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
+       measured_ketones_pre & measured_ketones_post) |
+      (cohort == 'cd_25' & measured_ketones_post)
+  ) %>% 
   # BMI filter
   filter(BMI_pre >= 18.5 & BMI_pre < 30) %>%
-  # Sex and age filter 
+  # Sex filter 
   filter(sex == 'female', age >= 35 & age <= 45) %>%
   # Diet exclusions
   filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
@@ -2143,9 +2218,9 @@ ketones_out_filter <- dataset_ketout %>%
   ungroup()
 
 cat('No. of participants before filtering: \n')
-unfiltered_count
-cat('No. of participants who finished and measured ketones: \n')
-finished_measured
+finished
+cat('No. of participants who measured ketones: \n')
+measured_ketones
 cat('No. of participants after BMI filter: \n')
 BMI_filter
 cat('No. of participants after sex and age filter: \n')
@@ -2170,7 +2245,7 @@ ketone_subjects <- dataset_diettext %>%
     se_ketone = sd_ketone / sqrt(n_ketone)
   ) %>% 
   ungroup() %>% 
-  # replace any NaN means (all-NA rows) with NA_real_
+  # Replace any NaN means (all-NA rows) with NA_real_
   mutate(mean_ketone = ifelse(is.nan(mean_ketone), NA_real_, mean_ketone),
          sd_ketone = ifelse(is.nan(sd_ketone), NA_real_, sd_ketone),
          se_ketone = ifelse(is.nan(se_ketone), NA_real_, se_ketone))
