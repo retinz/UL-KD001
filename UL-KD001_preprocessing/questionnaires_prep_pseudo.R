@@ -2285,6 +2285,7 @@ ketone_descriptives <- ketone_subjects %>%
   )
 ketone_descriptives
 
+# Check the number of measurements in ketosis
 ketone_descriptives_2 <- dataset_diettext %>% 
   rowwise() %>% 
   mutate(
@@ -2305,6 +2306,7 @@ cd_ketosis_check <- dataset_diettext %>%
   filter(group == 'CD' & 
            rowSums(across(starts_with('ketones_post_int_'), ~ .x >= 0.5), na.rm = TRUE) > 0) %>%
   select(participant_id, starts_with('ketones_post_int_'))
+view(cd_ketosis_check)
 
 cd_ketosis_check_2 <- dataset_diettext %>% 
   rowwise() %>% 
@@ -2314,6 +2316,7 @@ cd_ketosis_check_2 <- dataset_diettext %>%
   ungroup() %>%
   select(participant_id, group, ketosis) %>%
   filter(group == 'CD' & ketosis > 0)
+print(cd_ketosis_check_2, n = Inf)
 
 inspect_cd_foodlog <- cd_25_post_CLEAN %>%
   select(participant_id, starts_with('foodlog_')) %>%
@@ -2522,6 +2525,8 @@ rename(
   )
   ),
   across(matches('^PSQI_[578]') & !matches('^PSQI_5a'), 
+         # Though Q8 seems to have different answer options, in our Dutch version,
+         # the answer options matched those of the other selected questions
          ~ case_when(
            .x %in% c('Niet tijdens de afgelopen 2 weken',
                      'Niet tijdens de 2 weken')  ~ 0, # Not during the past 2 weeks
@@ -2548,6 +2553,9 @@ rename(
 dataset_final <- dataset_clean %>%
   
   # ASRS composite scores ---------------------
+
+# Using just the first 6 questions because they're the screener with a diagnostic 
+# value
   mutate(
   ASRS_total_pre = rowSums(across(matches('^ASRS_([1-6])_pre$')), na.rm = TRUE),
   ASRS_total_post = rowSums(across(matches('ASRS_([1-6])_post$')), na.rm = TRUE)
@@ -2827,8 +2835,8 @@ ggplot(keto_timeseries,
 
 # Save as RDS
 saveRDS(dataset_final, 
-        '~/UL-KD001/UL-KD001_data/LBI_clean/UL-KD001_questionnaires_pseudo.rds')
+        here('UL-KD001_data', 'LBI_clean', 'UL-KD001_questionnaires_pseudo.rds'))
 
 # Save as CSV
 write_csv(dataset_final, 
-          '~/UL-KD001/UL-KD001_data/LBI_clean/UL-KD001_questionnaires_pseudo.csv')
+          here('UL-KD001_data', 'LBI_clean', 'UL-KD001_questionnaires_pseudo.csv'))

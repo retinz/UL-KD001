@@ -12,7 +12,8 @@ library(tidyverse)
 # RAW DATA ------------------------
 
 # Load raw data
-data_raw <- read.csv('~/UL-KD001/UL-KD001_data/LBI_raw/cognitive_data_20250417.csv', 
+data_raw <- read.csv(here('UL-KD001_data', 'LBI_raw', 'raw_pseudoanonym',
+                          'cognitive_data_20250417.csv'), 
                      header = TRUE)
 
 # CLEAN DATA --------------------------
@@ -39,7 +40,8 @@ glimpse(data_trim)
 # - Filter participants -------------------------
 
 # Load clean and ready questionnaires to extract meta-data
-metadata_questionnaires <- readRDS('~/UL-KD001/UL-KD001_data/LBI_clean/UL-KD001_questionnaires_pseudo.rds') %>%
+metadata_questionnaires <- readRDS(here('UL-KD001_data', 'LBI_clean', 
+'UL-KD001_questionnaires_pseudo.rds')) %>%
   dplyr::select(participant_id, group, cohort)
 
 data_select <- data_trim %>%
@@ -64,7 +66,7 @@ unique(check_trials$trial_count)
 data_filter <- data_select %>%
   group_by(participant_id) %>%
   filter(n_distinct(session) == 2 & session %in% c(1, 2)) %>%
-  ungroup
+  ungroup()
 glimpse(data_filter)
 
 # Check dataset properties again
@@ -128,4 +130,7 @@ digit_repetitions
 # SAVE DATA -----------------------
 
 # Save as RDS
-saveRDS(data_chopped, '~/UL-KD001/UL-KD001_data/LBI_clean/UL-KD001_taskswitch_pseudo.rds')
+saveRDS(data_chopped, here('UL-KD001_data', 'LBI_clean', 'UL-KD001_taskswitch_pseudo.rds'))
+
+# Save as CSV
+write_csv(data_chopped, here('UL-KD001_data', 'LBI_clean', 'UL-KD001_taskswitch_pseudo.csv'))
