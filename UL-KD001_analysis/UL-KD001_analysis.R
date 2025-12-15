@@ -48,7 +48,7 @@
 # - diagnose_model() sometimes throws an error because of DHARMa;
 # it doesn't seem to affect the diagnostics, however. 
 
-# - None of the lmers converged except lmer log 4c
+# - None of the lmers converged except lmer log 4 and 4c
 # - glmmTMB log 5 doesn't converge
 # - glmmTMB with Gamma (link = 'identity') didn't run at all --> removed
 # - Modelling dispersion (variance) seems to improve the fit of the MMs
@@ -65,7 +65,7 @@
 # fit as indicated by residuals); (currently) statistically plausible to test error 
 # (as a covariate) at session level only when sessions are nested in participants.
 
-# - brms Bayesian model takes too long to compute --> removed
+# - brms Bayesian model takes too long to compute (like forever) --> removed
 
 # TASK-SWITCHING ER | MIXED-MODELS:
 # ----------------------------------- #
@@ -104,6 +104,7 @@
 
 # The order of libraries somewhat matters!
 
+library(here)
 library(BayesFactor)
 library(scales)
 library(ggbeeswarm)
@@ -128,7 +129,7 @@ library(MatchIt)
 library(cobalt)
 library(correlation)
 library(estimatr)
-source('analysis_helpers.R')
+source(here('UL-KD001_analysis', 'analysis_helpers.R'))
 
 # SESSION SETTINGS #
 # ===================== #
@@ -146,15 +147,19 @@ dodge_w <- 0.6
 dodge_w_BMI <- 0.2
 
 # Default directory for plots
-plot_directory <- './plots'
+plot_directory <- here('UL-KD001_analysis', 'plots')
 if (!dir.exists(plot_directory)) {
   dir.create(plot_directory, recursive = TRUE)
 }
 
-table_directory <- './tables'
+# Default directory for tables
+table_directory <- here('UL-KD001_analysis', 'tables')
 if (!dir.exists(table_directory)) {
   dir.create(table_directory, recursive = TRUE)
 }
+
+# Data path
+data_path <- here('UL-KD001_data', 'LBI_clean')
 
 # Detect number of logical processors for parallel processing
 n_cores = max(1L, as.integer(floor(parallel::detectCores())))
@@ -165,7 +170,7 @@ n_cores = max(1L, as.integer(floor(parallel::detectCores())))
 # ================================ #
 
 # Load questionnaire RDS
-questionnaires_data <- readRDS('~/UL-KD001/UL-KD001_data/LBI_clean/UL-KD001_questionnaires_pseudo.rds')
+questionnaires_data <- readRDS(file.path(data_path, 'UL-KD001_questionnaires_pseudo.rds'))
 
 # Adjust columns
 questionnaires_ready <- questionnaires_data %>%
@@ -181,7 +186,7 @@ questionnaires_ready <- questionnaires_data %>%
 # ================================ #
 
 # Load task-switching RDS 
-taskswitch_data <- readRDS('~/UL-KD001/UL-KD001_data/LBI_clean/UL-KD001_taskswitch_pseudo.rds')
+taskswitch_data <- readRDS(file.path(data_path, 'UL-KD001_taskswitch_pseudo.rds'))
 
 # Adjust columns
 taskswitch_ready <- taskswitch_data %>%
@@ -282,10 +287,11 @@ age_descriptives
 # Test difference #
 # ---------------------- #
 
-age_diff <- wilcox.test(x = questionnaires_long %>% filter(group == 'CD',
-                                                           session == 1) %>% pull(age),
-                        y = questionnaires_long %>% filter(group == 'KD',
-                                                           session == 1) %>% pull(age),
+age_diff <- wilcox.test(
+  x = questionnaires_long %>% filter(group == 'CD', 
+                                     session == 1) %>% pull(age),
+  y = questionnaires_long %>% filter(group == 'KD',
+                                     session == 1) %>% pull(age),
                         exact = FALSE)
 age_diff
 
@@ -379,7 +385,7 @@ questionnaires_long_afex <- questionnaires_long %>%
   mutate(session_afex = factor(session, levels = c(1,2),
                                labels = c('X1', 'X2')))
 
-BMI_2 <- afex_plot(
+BMI_afex <- afex_plot(
   BMI_anova,
   x = 'session',
   trace = 'group',
@@ -428,8 +434,8 @@ BMI_2 <- afex_plot(
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'BMI_2.pdf'),
-  plot = BMI_2,
+  filename = file.path(plot_directory, 'BMI_afex.pdf'),
+  plot = BMI_afex,
   device = cairo_pdf,
   width = 6.5, 
   height = 4.5,
@@ -474,7 +480,7 @@ gg_BMI_with <- ggplot(questionnaires_long,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_BMI_with.pdf'),
+  filename = file.path(plot_directory, 'BMI_with.pdf'),
   plot = gg_BMI_with,
   device = cairo_pdf,
   width = 6.5, 
@@ -1108,7 +1114,7 @@ isSingular(taskswitch_mm_3_rt)
 taskswitch_mm_3_rt_diag <- diagnose_lmer(taskswitch_mm_3_rt)
 print(taskswitch_mm_3_rt_diag, show_plots = TRUE)
 
-diagnose_model(taskswitch_mm_3_rt)
+diagnose_model(taskswitch_mm_3_rt, lme4 = TRUE)
 
 # - lmer log 4 (3-way + all task covariates + RE1+) ---------------------
 
@@ -1137,8 +1143,8 @@ taskswitch_mm_4b_rt <- lme4::lmer(
     cue_transition + prop_switch + prop_incong + prop_cue_switch + 
     (task_transition + congruence || participant_id),
   data = taskswitch_mixed_rt, REML = FALSE)
-summary(taskswitch_mm_4_rt)
-isSingular(taskswitch_mm_4_rt)
+summary(taskswitch_mm_4b_rt)
+isSingular(taskswitch_mm_4b_rt)
 
 # - lmer log 4c (3-way + all task covariates + RE1/) ---------------------
 
@@ -1149,7 +1155,7 @@ taskswitch_mm_4c_rt <- lme4::lmer(
     (1 | participant_id / session), 
   data = taskswitch_mixed_rt, REML = FALSE)
 summary(taskswitch_mm_4c_rt)
-isSingular(taskswitch_mm_4_rt)
+isSingular(taskswitch_mm_4c_rt)
 
 # Diagnostics #
 # ========================= #
@@ -1187,6 +1193,7 @@ diagnose_model(taskswitch_mm_6_rt)
 
 # - glmmTMB Gamma raw 7 (3-way + variance + all task covariates + RE1/) ----------------------------
 
+# A very bad fit
 taskswitch_mm_7_rt <- glmmTMB(
   response_time ~ group * session * task_transition + 
     group * session * congruence + 
@@ -1258,11 +1265,6 @@ summary(taskswitch_mm_7d_rt)
 # ========================= #
 
 diagnose_model(taskswitch_mm_7d_rt)
-
-# Model comparisons #
-# ========================== #
-
-anova(taskswitch_mm_7d_rt, taskswitch_mm_7c_rt)
 
 # - glmmTMB Gamma log 7e (3-way + (e)variance + 1 covariate + RE1+||) ----------------------------
 
@@ -1497,8 +1499,8 @@ diagnose_model(taskswitch_mm_9c_rt)
 # Cross validation #
 # ========================= #
 
-cv_taskswitch_mm_9_rt <- cv(taskswitch_mm_9_rt, k = 10, ncores = n_cores)
-summary(cv_taskswitch_mm_9_rt)
+cv_taskswitch_mm_9c_rt <- cv(taskswitch_mm_9c_rt, k = 10, ncores = n_cores)
+summary(cv_taskswitch_mm_9c_rt)
 
 # - Autocorrelation check ----------------------------
 
@@ -1538,7 +1540,8 @@ acf_mm_9c_rt <- taskswitch_mixed_rt %>%
            acf = as.numeric(ac$acf[-1]))
   })) %>%
   dplyr::select(-data) %>%                                             
-  unnest(acf_tbl)                                               
+  unnest(acf_tbl) %>%
+  ungroup()
 
 acf_mm_9c_rt_summary <- acf_mm_9c_rt %>%
   group_by(group, session, lag) %>%
@@ -1869,10 +1872,6 @@ plot(cv_taskswitch_mm_14_rt_ROW)
 
 # - glmmTMB log 15 (3-way + linear + 1 covariate + RE1/) -----------------------
 
-taskswitch_mixed_rt <- taskswitch_mixed_rt %>%
-  mutate(fitted_m11 = predict(taskswitch_mm_11_rt))
-glimpse(taskswitch_mixed_rt)
-
 taskswitch_mm_15_rt <- glmmTMB(
   log_rt ~ group * session * task_transition + 
     group * session * congruence + 
@@ -2067,13 +2066,13 @@ diagnose_model(taskswitch_mm_19b_rt)
 # ========================= #
 
 # Cluster-based
-cv_taskswitch_mm_19_rt <- cv(taskswitch_mm_19_rt, 
+cv_taskswitch_mm_19b_rt <- cv(taskswitch_mm_19b_rt, 
                              k = 5, 
                              clusterVariables = 'participant_id', 
                              ncores = n_cores,
                              reps = 10)
-summary(cv_taskswitch_mm_19_rt)
-plot(cv_taskswitch_mm_19_rt)
+summary(cv_taskswitch_mm_19b_rt)
+plot(cv_taskswitch_mm_19b_rt)
 
 # - glmmTMB log 19c (3-way + (ce)variance + 1 covariate + RE1/) -----------------------
 
@@ -2196,17 +2195,36 @@ data_mxmdl_rt_switch_adj_10b <- data_mxmdl_rt_switch_10b$data %>%
       labels = c('Repeat', 'Switch')
     ))
 
+# Afex means for SE
+afex_means_switch_10b <- data_mxmdl_rt_switch_10b$means %>%
+  as_tibble() %>%
+  # Select only what we need to join
+  dplyr::select(session, task_transition, group, SE) %>%
+  # Ensure factors match the emmeans tibble exactly for the join
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    task_transition = factor(task_transition, levels = c('repeat', 'switch'), 
+                             labels = c('Repeat', 'Switch')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Join SEs into the main plotting data
+switch_10b_plot_data <- switch_cost_emm_rt_tibble_10b %>%
+  # Drop SE from the emmeans tibble
+  dplyr::select(-SE) %>%
+  left_join(afex_means_switch_10b, by = c('group', 'session', 'task_transition'))
+
 # Plot
 pos_dodge <- position_dodge(width = dodge_tsmm)
-gg_mixed_switch_rt <- ggplot(switch_cost_emm_rt_tibble_10b,
+gg_mixed_switch_rt <- ggplot(switch_10b_plot_data,
        aes(x = session, y = emmean,
            colour = group,
            linetype = task_transition,
            group = interaction(group, task_transition))) +
   geom_line(position = pos_dodge, linewidth = .8) +
   geom_point(position = pos_dodge, size = 3) +
-  geom_errorbar(aes(ymin = emmean - data_mxmdl_rt_switch_10b$means$SE,
-                    ymax = emmean + data_mxmdl_rt_switch_10b$means$SE),
+  geom_errorbar(aes(ymin = emmean - SE,
+                    ymax = emmean + SE),
                 width = .1, position = pos_dodge) +
   geom_jitter(
     data = data_mxmdl_rt_switch_adj_10b,
@@ -2322,17 +2340,36 @@ data_mxmdl_rt_cngr_adj_10b <- data_mxmdl_rt_cngr_10b$data %>%
       labels = c('Congruent', 'Incongruent')
     ))
 
+# Afex means for SE
+afex_means_cngr_10b <- data_mxmdl_rt_cngr_10b$means %>%
+  as_tibble() %>%
+  # Select only what we need to join
+  dplyr::select(session, congruence, group, SE) %>%
+  # Ensure factors match the emmeans tibble exactly for the join
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    congruence = factor(congruence, levels = c('repeat', 'switch'), 
+                             labels = c('Repeat', 'Switch')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Join SEs into the main plotting data
+cngr_10b_plot_data <- incongruence_cost_emm_tibble_10b %>%
+  # Drop SE from the emmeans tibble
+  dplyr::select(-SE) %>%
+  left_join(afex_means_cngr_10b, by = c('group', 'session', 'congruence'))
+
 # Plot
 pos_dodge <- position_dodge(width = dodge_tsmm)
-gg_mixed_incongr_rt <- ggplot(incongruence_cost_emm_tibble_10b,
+gg_mixed_incongr_rt <- ggplot(cngr_10b_plot_data,
        aes(x = session, y = emmean,
            colour = group,
            linetype = congruence,
            group = interaction(group, congruence))) +
   geom_line(position = pos_dodge, linewidth = .8) +
   geom_point(position = pos_dodge, size = 3) +
-  geom_errorbar(aes(ymin = emmean - data_mxmdl_rt_cngr_10b$means$SE,
-                    ymax = emmean + data_mxmdl_rt_cngr_10b$means$SE),
+  geom_errorbar(aes(ymin = emmean - SE,
+                    ymax = emmean + SE),
                 width = .1, position = pos_dodge) +
   geom_jitter(
     data = data_mxmdl_rt_cngr_adj_10b,
@@ -2449,26 +2486,43 @@ data_mxmdl_rt_switch_adj_7g <- data_mxmdl_rt_switch_7g$data %>%
       labels = c('Repeat', 'Switch')
     ))
 
-# Plot
-dodge_w <- 0.2
-pos_dodge <- position_dodge(width = dodge_w)
+# Afex means for SE
+afex_means_switch_7g <- data_mxmdl_rt_switch_7g$means %>%
+  as_tibble() %>%
+  # Select only what we need to join
+  dplyr::select(session, task_transition, group, SE) %>%
+  # Ensure factors match the emmeans tibble exactly for the join
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    task_transition = factor(task_transition, levels = c('repeat', 'switch'), 
+                             labels = c('Repeat', 'Switch')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
 
-ggplot(switch_cost_emm_rt_tibble_7g,
+# Join SEs into the main plotting data
+switch_7g_plot_data <- switch_cost_emm_rt_tibble_7g %>%
+  # Drop SE from the emmeans tibble
+  dplyr::select(-SE) %>%
+  left_join(afex_means_switch_7g, by = c('group', 'session', 'task_transition'))
+
+# Plot
+pos_dodge <- position_dodge(width = dodge_tsmm)
+ggplot(switch_7g_plot_data,
        aes(x = session, y = response,
            colour = group,
            linetype = task_transition,
            group = interaction(group, task_transition))) +
   geom_line(position = pos_dodge, linewidth = .8) +
   geom_point(position = pos_dodge, size = 3) +
-  geom_errorbar(aes(ymin = response - data_mxmdl_rt_switch_7g$means$SE,
-                    ymax = response + data_mxmdl_rt_switch_7g$means$SE),
+  geom_errorbar(aes(ymin = response - SE,
+                    ymax = response + SE),
                 width = .1, position = pos_dodge) +
   geom_jitter(
     data = data_mxmdl_rt_switch_adj_7g,
     aes(x = session, y = y, colour = group,
         group = interaction(group, task_transition)),
     position = position_jitterdodge(
-      jitter.width = 0.05, jitter.height = 0, dodge.width = dodge_w
+      jitter.width = 0.05, jitter.height = 0, dodge.width = dodge_tsmm
     ),
     alpha = 0.4, inherit.aes = FALSE, show.legend = FALSE
   ) +
@@ -2676,10 +2730,32 @@ data_mxmdl_er_switch_adj <- data_mxmdl_er_switch$data %>%
     group = factor(group, levels = c('CD', 'KD'))
   )
 
+# Afex means for SE
+afex_means_switch_5_er <- data_mxmdl_er_switch$means %>%
+  as_tibble() %>%
+  # Select only what we need to join
+  dplyr::select(session, task_transition, congruence, group, SE) %>%
+  # Ensure factors match the emmeans tibble exactly for the join
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    congruence = factor(congruence, levels = c('congruent', 'incongruent'),
+                        labels = c('Congruent', 'Incongruent')),
+    task_transition = factor(task_transition, levels = c('repeat', 'switch'), 
+                             labels = c('Repeat', 'Switch')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Join SEs into the main plotting data
+switch_5_er_plot_data <- switch_cost_emm_er_tibble %>%
+  # Drop SE from the emmeans tibble
+  dplyr::select(-SE) %>%
+  left_join(afex_means_switch_5_er, by = c('group', 'congruence',
+                                           'session', 'task_transition'))
+
 # Plot
 pos_dodge <- position_dodge(width = dodge_tsmm)
 gg_mixed_switch_acc <- ggplot(
-  switch_cost_emm_er_tibble,
+  switch_5_er_plot_data,
   aes(
     x = session, y = prob * 100,
     colour = group,
@@ -2700,8 +2776,8 @@ gg_mixed_switch_acc <- ggplot(
   geom_point(position = pos_dodge, size = 3) +
   geom_errorbar(
     aes(
-      ymin = prob * 100 - data_mxmdl_er_switch$means$SE * 100,
-      ymax = prob * 100 + data_mxmdl_er_switch$means$SE * 100
+      ymin = prob * 100 - SE * 100,
+      ymax = prob * 100 + SE * 100
     ),
     width = .1, position = pos_dodge
   ) +
@@ -2789,10 +2865,32 @@ data_mxmdl_er_incongruence_adj <- data_mxmdl_er_incongruence$data %>%
     group = factor(group, levels = c('CD', 'KD'))
   )
 
+# Afex means for SE
+afex_means_cngr_5_er <- data_mxmdl_er_incongruence$means %>%
+  as_tibble() %>%
+  # Select only what we need to join
+  dplyr::select(session, task_transition, congruence, group, SE) %>%
+  # Ensure factors match the emmeans tibble exactly for the join
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    congruence = factor(congruence, levels = c('congruent', 'incongruent'), 
+                        labels = c('Congruent', 'Incongruent')),
+    task_transition = factor(task_transition, levels = c('repeat', 'switch'),
+                             labels = c('Repeat', 'Switch')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Join SEs into the main plotting data
+cngr_5_er_plot_data <- incongruence_cost_emm_er_tibble %>%
+  # Drop SE from the emmeans tibble
+  dplyr::select(-SE) %>%
+  left_join(afex_means_cngr_5_er, by = c('group', 'session', 'congruence', 
+                                         'task_transition'))
+
 # Plot
 pos_dodge <- position_dodge(width = dodge_tsmm)
 gg_mixed_incongr_acc <- ggplot(
-  incongruence_cost_emm_er_tibble,
+  cngr_5_er_plot_data,
   aes(
     x = session, y = prob * 100,
     colour = group,
@@ -2813,8 +2911,8 @@ gg_mixed_incongr_acc <- ggplot(
   geom_point(position = pos_dodge, size = 3) +
   geom_errorbar(
     aes(
-      ymin = prob * 100 - data_mxmdl_er_incongruence$means$SE * 100,
-      ymax = prob * 100 + data_mxmdl_er_incongruence$means$SE * 100
+      ymin = prob * 100 - SE * 100,
+      ymax = prob * 100 + SE * 100
     ),
     width = .1, position = pos_dodge
   ) +
@@ -2844,7 +2942,7 @@ ggsave(
   units = 'in'
 )
 
-# MIXED-EFFECTS BASELINE --------------------------
+# MIXED-EFFECTS RT & ACC BASELINE --------------------------
 
 # RT #
 # ========= #
@@ -2867,6 +2965,13 @@ taskswitch_emm_base_er
 # Comparison
 taskswitch_base_er <- contrast(taskswitch_emm_base_er, 'pairwise')
 taskswitch_base_er
+
+# CLEAN WS ---------------
+
+# Remove unnecessary mixed-effects models
+rm(list = setdiff(ls(pattern = '^taskswitch_mm'), 
+                  c('taskswitch_mm_5_er', 'taskswitch_mm_19c_rt', 
+                    'taskswitch_mm_10b_rt', 'taskswitch_mm_7g_rt')))
 
 # TASK-SWITCHING AGGREGATION RE-ANALYSIS -------------------------
 
@@ -2988,7 +3093,7 @@ outlying_trials
 
 # - Visualise average RT -----------------------
 
-# Histogram
+# Density
 ggplot(ts_agg_rt, aes(x = average_rt, colour = group, fill = group)) +
   geom_density(alpha = 0.7, adjust = 1) +
   facet_wrap(~ group + session) +
@@ -3143,7 +3248,7 @@ gg_switch_rt_agg_with <- ggplot(ts_agg_rt,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'switch_cost_rt_agg_with.pdf'),
+  filename = file.path(plot_directory, 'switch_rt_agg_with.pdf'),
   plot = gg_switch_rt_agg_with,
   device = cairo_pdf,
   width = 6.5, 
@@ -3202,7 +3307,7 @@ gg_switch_rt_agg_without <- ggplot(ts_agg_rt,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'switch_cost_rt_agg_without.pdf'),
+  filename = file.path(plot_directory, 'switch_rt_agg_without.pdf'),
   plot = gg_switch_rt_agg_without,
   device = cairo_pdf,
   width = 6.5, 
@@ -3215,7 +3320,7 @@ ggsave(
 
 # Bar plot
 # - Error bars: between-subject SE of trimmed mean
-pd <- position_dodge(width = 0.6) 
+pd <- position_dodge(width = dodge_w) 
 gg_switchrt_trbar <- ggplot(taskswitch_rt_trwin %>% filter(dv == 'switch_cost'),
        aes(x = session,
            y = mean_tr,
@@ -3369,7 +3474,7 @@ gg_incongr_cost_rt_agg_with <- ggplot(ts_agg_rt,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'incongr_cost_rt_agg_with.pdf'),
+  filename = file.path(plot_directory, 'incongr_rt_agg_with.pdf'),
   plot = gg_incongr_cost_rt_agg_with,
   device = cairo_pdf,
   width = 6.5, 
@@ -3428,7 +3533,7 @@ gg_incongr_cost_rt_agg <- ggplot(ts_agg_rt,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'incongr_cost_rt_agg.pdf'),
+  filename = file.path(plot_directory, 'incongr_rt_agg.pdf'),
   plot = gg_incongr_cost_rt_agg,
   device = cairo_pdf,
   width = 6.5, 
@@ -3464,7 +3569,7 @@ gg_incongrrt_trbar <- ggplot(taskswitch_rt_trwin %>% filter(dv == 'incongruence_
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_incongrrt_trbar.pdf'),
+  filename = file.path(plot_directory, 'incongrrt_trbar.pdf'),
   plot = gg_incongrrt_trbar,
   device = cairo_pdf,
   width = 6.5, 
@@ -3692,7 +3797,7 @@ gg_switch_cost_acc_agg_with <- ggplot(ts_agg_er,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'switch_cost_acc_agg_with.pdf'),
+  filename = file.path(plot_directory, 'switch_acc_agg_with.pdf'),
   plot = gg_switch_cost_acc_agg_with,
   device = cairo_pdf,
   width = 6.5, 
@@ -3751,7 +3856,7 @@ gg_switch_cost_acc_agg <- ggplot(ts_agg_er,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'switch_cost_acc_agg.pdf'),
+  filename = file.path(plot_directory, 'switch_acc_agg.pdf'),
   plot = gg_switch_cost_acc_agg,
   device = cairo_pdf,
   width = 6.5, 
@@ -3769,7 +3874,7 @@ ts_agg_er_wide <- ts_agg_er %>%
               values_from = c('switch_cost', 'incongruence_cost')) %>%
   mutate(switch_cost_change = switch_cost_1 - switch_cost_2,
          incongruence_cost_change = incongruence_cost_1 - incongruence_cost_2)
-glimpse(ts_agg_rt_wide)
+glimpse(ts_agg_er_wide)
 
 # Density
 ggplot(ts_agg_er_wide, aes(x = switch_cost_change, 
@@ -3880,7 +3985,7 @@ gg_incongr_cost_acc_agg_with <- ggplot(ts_agg_er,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'incongr_cost_acc_agg_with.pdf'),
+  filename = file.path(plot_directory, 'incongr_acc_agg_with.pdf'),
   plot = gg_incongr_cost_acc_agg_with,
   device = cairo_pdf,
   width = 6.5, 
@@ -3939,7 +4044,7 @@ gg_incongr_cost_acc_agg <- ggplot(ts_agg_er,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'incongr_cost_acc_agg.pdf'),
+  filename = file.path(plot_directory, 'incongr_acc_agg.pdf'),
   plot = gg_incongr_cost_acc_agg,
   device = cairo_pdf,
   width = 6.5, 
@@ -3961,7 +4066,7 @@ avg_rt_tranova
 # ----------------- #
 
 # Basic Yuen
-avg_rt_yuen <- yuen(average_rt ~ group * session,
+avg_rt_yuen <- yuen(average_rt ~ group,
                     data = ts_agg_rt %>% 
                       filter(session == 1),
                     tr = 0.2)
@@ -4896,16 +5001,16 @@ ggsave(
 # ======================== #
 
 # Baseline
-switchrt_baseline_bf <- ttestBF(x = ts_agg_rt %>% 
+incongrrt_baseline_bf <- ttestBF(x = ts_agg_rt %>% 
                                   filter(session == 1, 
                                          group == 'CD') %>%
-                                  pull(switch_cost),
+                                  pull(incongruence_cost),
                                 y = ts_agg_rt %>% 
                                   filter(session == 1, 
                                          group == 'KD') %>%
-                                  pull(switch_cost),
+                                  pull(incongruence_cost),
                                 rscale = 'medium')
-switchrt_baseline_bf
+incongrrt_baseline_bf
 
 # - Trimmed average ER (ACC) -----------------
 

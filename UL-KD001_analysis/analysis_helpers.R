@@ -423,7 +423,6 @@ inspect_subject_dist <- function(
   plots
 }
 
-
 # ROBUSTIFICATION ------------------
 # - Robust estimation -----------------
 
