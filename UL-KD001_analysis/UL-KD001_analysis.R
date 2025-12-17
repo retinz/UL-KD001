@@ -5026,7 +5026,7 @@ avg_acc_tranova
 # ----------------- #
 
 # Basic Yuen
-avg_acc_yuen <- yuen(average_acc ~ group * session,
+avg_acc_yuen <- yuen(average_acc ~ group,
                     data = ts_agg_er %>% 
                       filter(session == 1),
                     tr = 0.2)
@@ -5977,7 +5977,7 @@ gg_ASRS_with <- ggplot(questionnaires_long,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_ASRS_with.pdf'),
+  filename = file.path(plot_directory, 'ASRS_with.pdf'),
   plot = gg_ASRS_with,
   device = cairo_pdf,
   width = 6.5, 
@@ -6035,7 +6035,7 @@ gg_ASRS_without <- ggplot(questionnaires_long,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_ASRS_without.pdf'),
+  filename = file.path(plot_directory, 'ASRS_without.pdf'),
   plot = gg_ASRS_without,
   device = cairo_pdf,
   width = 6.5, 
@@ -6070,7 +6070,7 @@ gg_ASRS_trbar <- ggplot(questionnaires_trwin %>% filter(dv == 'ASRS'),
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_ASRS_trbar.pdf'),
+  filename = file.path(plot_directory, 'ASRS_trbar.pdf'),
   plot = gg_ASRS_trbar,
   device = cairo_pdf,
   width = 6.5, 
@@ -6136,7 +6136,7 @@ gg_ASRS_change <- ggplot(ASRS_wide, aes(x = group,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_ASRS_change.pdf'),
+  filename = file.path(plot_directory, 'ASRS_change.pdf'),
   plot = gg_ASRS_change,
   device = cairo_pdf,
   width = 6.5, 
@@ -6564,7 +6564,7 @@ ggsave(
 # ======================== #
 
 # Baseline (medium)
-ASRS_baseline_bf <- ttestBF(x = questionnaires_long %>% 
+ASRS_baseline_bf_medium <- ttestBF(x = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'CD') %>%
                               pull(ASRS),
@@ -6573,10 +6573,10 @@ ASRS_baseline_bf <- ttestBF(x = questionnaires_long %>%
                                      group == 'KD') %>%
                               pull(ASRS),
                             rscale = 'medium')
-ASRS_baseline_bf
+ASRS_baseline_bf_medium
 
 # Baseline (r = 0.5)
-ASRS_baseline_bf <- ttestBF(x = questionnaires_long %>% 
+ASRS_baseline_bf_small <- ttestBF(x = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'CD') %>%
                               pull(ASRS),
@@ -6585,10 +6585,10 @@ ASRS_baseline_bf <- ttestBF(x = questionnaires_long %>%
                                      group == 'KD') %>%
                               pull(ASRS),
                             rscale = 0.5)
-ASRS_baseline_bf
+ASRS_baseline_bf_small
 
 # Baseline (r = 0.3)
-ASRS_baseline_bf <- ttestBF(x = questionnaires_long %>% 
+ASRS_baseline_bf_tiny <- ttestBF(x = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'CD') %>%
                               pull(ASRS),
@@ -6597,7 +6597,7 @@ ASRS_baseline_bf <- ttestBF(x = questionnaires_long %>%
                                      group == 'KD') %>%
                               pull(ASRS),
                             rscale = 0.3)
-ASRS_baseline_bf
+ASRS_baseline_bf_tiny
 
 # PSQI ANALYSIS -----------------
 # - Visualise data -------------------
@@ -6662,6 +6662,7 @@ ggsave(
 )
 
 # Boxplots without trajectories
+# - Error bars: between-subject SE of trimmed mean
 gg_PSQI_without <- ggplot(questionnaires_long,
        aes(x = session,
            y = PSQI,
@@ -6745,7 +6746,7 @@ gg_PSQI_trbar <- ggplot(questionnaires_trwin %>% filter(dv == 'PSQI'),
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_PSQI_trbar.pdf'),
+  filename = file.path(plot_directory, 'PSQI_trbar.pdf'),
   plot = gg_PSQI_trbar,
   device = cairo_pdf,
   width = 6.5, 
@@ -6809,7 +6810,7 @@ gg_PSQI_change <- ggplot(PSQI_wide, aes(x = group,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_PSQI_change.pdf'),
+  filename = file.path(plot_directory, 'PSQI_change.pdf'),
   plot = gg_PSQI_change,
   device = cairo_pdf,
   width = 6.5, 
@@ -6872,9 +6873,16 @@ PSQI_session_eff
 
 # Effect size of the main effect of group (only separately for 
 # each time point)
-PSQI_group_eff <- bw.es.A(2, 2, PSQI_post_tr_list, 
-                            tr = 0.2, pr = TRUE, fun = ES.summary.CI)
+PSQI_group_eff <- bw.es.A(2, 2, PSQI_post_tr_list, tr = 0.2, 
+                          pr = TRUE, fun = ES.summary.CI)
 PSQI_group_eff
+
+# Pooled
+PSQI_group_eff_pool <- yuen.effect.ci(PSQI ~ group,
+                                      data = questionnaires_long,
+                                      tr = 0.2,
+                                      nboot = 1000)
+PSQI_group_eff_pool
 
 # - Regular mixed ANOVA ---------------------
 
@@ -7142,7 +7150,7 @@ ggsave(
   units = 'in'
 )
 
-# Medium prior SESSION ~ posterior #
+# Medium prior GROUP ~ posterior #
 # ---------------------------- #
 
 PSQI_bfanova_medium_posterior_group <- bf_contrast_posterior(
@@ -7233,7 +7241,7 @@ gg_BDI_with <- ggplot(questionnaires_long,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_BDI_with.pdf'),
+  filename = file.path(plot_directory, 'BDI_with.pdf'),
   plot = gg_BDI_with,
   device = cairo_pdf,
   width = 6.5, 
@@ -7290,7 +7298,7 @@ gg_BDI_without <- ggplot(questionnaires_long,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_BDI_without.pdf'),
+  filename = file.path(plot_directory, 'BDI_without.pdf'),
   plot = gg_BDI_without,
   device = cairo_pdf,
   width = 6.5, 
@@ -7325,7 +7333,7 @@ gg_BDI_trbar <- ggplot(questionnaires_trwin %>% filter(dv == 'BDI'),
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_BDI_trbar.pdf'),
+  filename = file.path(plot_directory, 'BDI_trbar.pdf'),
   plot = gg_BDI_trbar,
   device = cairo_pdf,
   width = 6.5, 
@@ -7390,7 +7398,7 @@ gg_BDI_change <- ggplot(BDI_wide, aes(x = group,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'gg_BDI_change.pdf'),
+  filename = file.path(plot_directory, 'BDI_change.pdf'),
   plot = gg_BDI_change,
   device = cairo_pdf,
   width = 6.5, 
@@ -8769,7 +8777,7 @@ qt_ketones_both <- explore_tibble %>%
     PSQI_change = PSQI_1 - PSQI_2,
     across(c(ends_with('_change'), ends_with('_1'), 'ketones_pre'), 
            ~ as.numeric(scale(.x, scale = FALSE))))
-glimpse(qt_ketones)
+glimpse(qt_ketones_both)
 
 # Prepare tibble for change analysis #
 # -------------------------------------- #
@@ -8792,7 +8800,7 @@ glimpse(change_data)
 # Visualise weighted ketones #
 # ================================ #
 
-weighted_ketones <- ggplot(ketones_weighed %>% filter(group == 'KD'),
+weighted_ketones_plot <- ggplot(ketones_weighed %>% filter(group == 'KD'),
        aes(x = group, y = ketones_post, colour = group)) +
   geom_jitter(size = 2.6, width = 0.2, alpha = 0.7) +
   scale_colour_manual(values = pal, guide = 'none') +
@@ -8806,7 +8814,7 @@ weighted_ketones <- ggplot(ketones_weighed %>% filter(group == 'KD'),
 # Save plot
 ggsave(
   filename = file.path(plot_directory, 'weighted_ketones.pdf'),
-  plot = weighted_ketones,
+  plot = weighted_ketones_plot,
   device = cairo_pdf,
   width = 6.5, 
   height = 4.5,
@@ -8816,7 +8824,7 @@ ggsave(
 # Visualise ketones change #
 # ================================ #
 
-ketones_change <- ggplot(qt_ketones %>% filter(group == 'KD'),
+ketones_change_plot <- ggplot(qt_ketones %>% filter(group == 'KD'),
                            aes(x = group, y = ketones_change, colour = group)) +
   geom_jitter(size = 2.6, width = 0.2, alpha = 0.7) +
   scale_colour_manual(values = pal, guide = 'none') +
@@ -8828,7 +8836,7 @@ ketones_change <- ggplot(qt_ketones %>% filter(group == 'KD'),
 # Save plot
 ggsave(
   filename = file.path(plot_directory, 'ketones_change.pdf'),
-  plot = ketones_change,
+  plot = ketones_change_plot,
   device = cairo_pdf,
   width = 6.5, 
   height = 4.5,
@@ -8838,7 +8846,7 @@ ggsave(
 # Visualise BMI change #
 # ================================ #
 
-BMI_change <- ggplot(qt_ketones_both,
+BMI_change_plot <- ggplot(qt_ketones_both,
                          aes(x = group, y = BMI_change, colour = group)) +
   geom_jitter(size = 2.6, width = 0.2, alpha = 0.7) +
   scale_colour_manual(values = pal, guide = 'none') +
@@ -8849,8 +8857,8 @@ BMI_change <- ggplot(qt_ketones_both,
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'ketones_change.pdf'),
-  plot = ketones_change,
+  filename = file.path(plot_directory, 'BMI_change.pdf'),
+  plot = BMI_change_plot,
   device = cairo_pdf,
   width = 6.5, 
   height = 4.5,
@@ -9011,26 +9019,26 @@ ASRS_keto_X2_ctrl_BMI <- ASRS_keto_X2[, c('ASRS_1', 'ketones_pre',
                                       'ketones_change', 'BMI_1'), drop = FALSE]
 
 # Residualise ASRS_2 on the controls
-fit_y_X2 <- WRS::tshdreg(ASRS_keto_X2_ctrl_BMI, qt_ketones$ASRS_2,
+fit_y_X2_BMI <- WRS::tshdreg(ASRS_keto_X2_ctrl_BMI, qt_ketones$ASRS_2,
                          xout = TRUE, iter = 10000,
                          outfun = outpro, corfun = pbcor, WARN = FALSE)
-y_X2_res <- qt_ketones$ASRS_2 - as.numeric(cbind(1, ASRS_keto_X2_ctrl_BMI) %*% fit_y_X2$coef)
+y_X2_res_BMI <- qt_ketones$ASRS_2 - as.numeric(cbind(1, ASRS_keto_X2_ctrl_BMI) %*% fit_y_X2_BMI$coef)
 
 # Residualise BMI_change on the controls
-fit_x_X2 <- WRS::tshdreg(ASRS_keto_X2_ctrl_BMI, ASRS_keto_X2[, 'BMI_change'],
+fit_x_X2_BMI <- WRS::tshdreg(ASRS_keto_X2_ctrl_BMI, ASRS_keto_X2[, 'BMI_change'],
                          xout = TRUE, iter = 10000,
                          outfun = outpro, corfun = pbcor, WARN = FALSE)
-x_X2_res <- ASRS_keto_X2[, 'BMI_change'] - as.numeric(cbind(1, ASRS_keto_X2_ctrl_BMI) %*% fit_x_X2$coef)
+x_X2_res_BMI <- ASRS_keto_X2[, 'BMI_change'] - as.numeric(cbind(1, ASRS_keto_X2_ctrl_BMI) %*% fit_x_X2_BMI$coef)
 
 # Pull slope & intercept for BMI_change from the full model
-ASRS_X2_slope <- ASRS_keto_2$coef[5]
-ASRS_X2_intercept <- ASRS_keto_2$coef[1]
+ASRS_X2_slope_BMI <- ASRS_keto_2$coef[5]
+ASRS_X2_intercept_BMI <- ASRS_keto_2$coef[1]
 
 # Plot
-tibble(x_res = x_X2_res, y_res = y_X2_res) %>% 
+tibble(x_res = x_X2_res_BMI, y_res = y_X2_res_BMI) %>% 
   ggplot(aes(x = x_res, y = y_res)) +
   geom_point(alpha = 0.75, size = 2, colour = pal['KD']) +
-  geom_abline(intercept = 0, slope = ASRS_X2_slope,
+  geom_abline(intercept = 0, slope = ASRS_X2_slope_BMI,
               colour = 'black', linewidth = 0.9) +
   labs(x = 'BMI change (residuals)',
        y = 'ASRS-2 (residuals)',
@@ -9050,12 +9058,12 @@ ASRS_keto_X_tsts <- model.matrix(~ ASRS_1 + ketones_change + ketones_pre,
                             data = qt_ketones)[ , -1]
 
 # Define regression model
-ASRS_keto_tsts <- WRS::tstsreg(ASRS_keto_X, qt_ketones$ASRS_2, xout=TRUE, 
+ASRS_keto_tsts <- WRS::tstsreg(ASRS_keto_X_tsts, qt_ketones$ASRS_2, xout=TRUE, 
                           iter = 50, sc = pbvar, outfun=outpro, plotit = FALSE)
 ASRS_keto_tsts$coef
 
 # Omnibus test
-ASRS_keto_omni_tsts <- regtestMC_c(ASRS_keto_X, 
+ASRS_keto_omni_tsts <- regtestMC_c(ASRS_keto_X_tsts, 
                                  qt_ketones$ASRS_2, 
                                  regfun = tstsreg, nboot = 599, alpha = 0.05, 
                                  plotit = TRUE, xout = TRUE, outfun = outpro) 
@@ -9070,7 +9078,7 @@ ASRS_keto_X2_tsts <- model.matrix(~ ASRS_1 + ketones_change +
                              data = qt_ketones)[ , -1]
 
 # Define regression model
-ASRS_keto_2_tsts <- WRS::tstsreg(ASRS_keto_X2, qt_ketones$ASRS_2, xout=TRUE, 
+ASRS_keto_2_tsts <- WRS::tstsreg(ASRS_keto_X2_tsts, qt_ketones$ASRS_2, xout=TRUE, 
                             iter = 50, sc = pbvar, outfun=outpro, plotit = FALSE)
 ASRS_keto_2_tsts$coef
 
@@ -9196,7 +9204,7 @@ ASRS_z <- c('BMI_1','age','average_rt_1','average_acc_1')
 # KD #
 # **************** #
 
-# Residualise ranked Y and X on ranked controls (keep NA positions)
+# Residualise Y and X on controls (keep NA positions)
 ASRS_change_fit_KD <- lm(ASRS_change ~ .,
                          data = change_data %>% 
                            filter(group == 'KD') %>%
@@ -9210,7 +9218,7 @@ ASRS_base_fit_KD <- lm(ASRS_1 ~ .,
 ASRS_change_res_KD <- resid(ASRS_change_fit_KD)
 ASRS_base_res_KD  <- resid(ASRS_base_fit_KD)
 
-# Spearman-on-ranks == Pearson on (z-scored) residuals
+# Spearman-on-ranks == Pearson on ranked residuals
 rho_KD <- cor.test(rank(ASRS_change_res_KD),
               rank(ASRS_base_res_KD),
               method = 'pearson',
@@ -9220,7 +9228,7 @@ rho_KD
 # CD #
 # **************** #
 
-# Residualise ranked Y and X on ranked controls (keep NA positions)
+# Residualise Y and X on controls (keep NA positions)
 ASRS_change_fit_CD <- lm(ASRS_change ~ .,
                          data = change_data %>% 
                            filter(group == 'CD') %>%
@@ -9234,7 +9242,7 @@ ASRS_base_fit_CD <- lm(ASRS_1 ~ .,
 ASRS_change_res_CD <- resid(ASRS_change_fit_CD)
 ASRS_base_res_CD  <- resid(ASRS_base_fit_CD)
 
-# Spearman-on-ranks == Pearson on (z-scored) residuals
+# Spearman-on-ranks == Pearson on ranked residuals
 rho_CD <- cor.test(rank(ASRS_change_res_CD),
               rank(ASRS_base_res_CD),
               method = 'pearson',
@@ -9324,6 +9332,48 @@ basechange_coeffs_blom <- basechange_coeffs_all_pear_c0 %>%
                 ~ round(.x, 2)))
 view(basechange_coeffs_blom)
 
+# - Cronbach's Alpha --------------------
+
+# NOTE: Just checking if internal consistency will give values 
+# higher than ICC from literature, as higher values for the Blomqvist's k
+# may prevent the correltion coefficeints from rising above 1
+
+# Simplify raw questionnaire data for Cronbach's Alpha calculations
+cronbach_tibble <- questionnaires_data %>%
+  dplyr::select(
+    # 1. Remove all POST columns for these scales
+    -c(starts_with(c('BDI_', 'PSQI_', 'ASRS_')) & ends_with('_post')),
+    
+    # 2. Remove Ketone columns
+    -starts_with('ketones_'),
+    
+    # 3. Remove ASRS items 7 through 18 (keeping only 1-6 screener)
+    # Regex explanation: Matches 7-9 OR 10-18
+    -matches('^ASRS_([7-9]|1[0-8])_'), 
+    
+    # 4. Remove specific PSQI columns 
+    -matches('^PSQI_[0-9]'),
+    
+    # 5. Remove total scores
+    -contains('total')
+  )
+glimpse(cronbach_tibble)
+
+# BDI Cronbach's Alpha
+BDI_cronbach <- psych::alpha(cronbach_tibble %>% dplyr::select(starts_with('BDI')),
+             check.keys = FALSE)
+BDI_cronbach
+
+# PSQI Cronbach's Alpha
+PSQI_cronbach <- psych::alpha(cronbach_tibble %>% dplyr::select(starts_with('PSQI')),
+                             check.keys = FALSE)
+PSQI_cronbach
+
+# ASRS Cronbach's Alpha
+ASRS_cronbach <- psych::alpha(cronbach_tibble %>% dplyr::select(starts_with('ASRS')),
+                              check.keys = FALSE)
+ASRS_cronbach
+
 # P-VALUE ADJUSTMENT ------------------
 # - Effects trimmed ---------------
 
@@ -9407,7 +9457,7 @@ print(effects_trimmed_int, n = Inf)
 # -------------------------------- #
 
 # Apply extraction function
-effects_trimmed_sesschange <- imap(bwtrim_list, ~ {
+effects_trimmed_change <- imap(bwtrim_list, ~ {
   df <- tidy_WRS2(.x,
                   lab_key,
                   p.adjust = FALSE)
@@ -9440,7 +9490,7 @@ effects_trimmed_sesschange <- imap(bwtrim_list, ~ {
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH')) %>%
   mutate(across(c(statistic, p.value, p.adj), ~ round(.x, 3)))
-effects_trimmed_sesschange
+effects_trimmed_change
 
 # - Effects conventional ---------------
 
@@ -9470,7 +9520,7 @@ effects_conventional_group <- imap(conventional_list,
   list_rbind() %>%
   relocate(response) %>%
   mutate(across(c(statistic, pes, p.value), ~ round(.x, 3))) %>%
-  # Select only main effect of session
+  # Select only main effect of group
   filter(term == 'group') %>%
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH'))
