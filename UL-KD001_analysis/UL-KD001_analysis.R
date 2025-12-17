@@ -6249,6 +6249,12 @@ ASRS_session_eff <- bw.es.B(2, 2, ASRS_post_tr_list,
                            CI = TRUE, SEED = TRUE, REL.MAG = NULL)
 ASRS_session_eff
 
+# Pooled effect size (session)
+ASRS_session_eff_pool <- bw.es.B(2, 2, ASRS_post_tr_list, 
+                            tr = 0.2, POOL = TRUE, OPT = FALSE, 
+                            CI = TRUE, SEED = TRUE, REL.MAG = NULL)
+ASRS_session_eff_pool
+
 # - Regular mixed ANOVA ---------------------
 
 ASRS_anova <- aov_4(ASRS ~ group * session + (session | participant_id),
@@ -8929,7 +8935,7 @@ ASRS_keto_2$Explanatory.Power
 ASRS_keto_2_omni <- WRS::regtestMC(ASRS_keto_X2, qt_ketones$ASRS_2, 
                                    iter = 10000, regfun = tshdreg, nboot = 599, 
                                    alpha = 0.05, plotit = TRUE, xout = TRUE, 
-                                   outfun = outpro) 
+                                   outfun = outpro, SEED = TRUE) 
 ASRS_keto_2_omni
 
 # Test coefficients
@@ -9563,5 +9569,3 @@ effects_conventional_int <- imap(conventional_list,
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH'))
 print(effects_conventional_int, n = Inf)
-
-# NOTE
