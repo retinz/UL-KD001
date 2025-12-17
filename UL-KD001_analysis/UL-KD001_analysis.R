@@ -9563,3 +9563,5 @@ effects_conventional_int <- imap(conventional_list,
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH'))
 print(effects_conventional_int, n = Inf)
+
+# NOTE
