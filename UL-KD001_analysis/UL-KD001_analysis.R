@@ -289,9 +289,9 @@ age_descriptives
 
 age_diff <- wilcox.test(
   x = questionnaires_long %>% filter(group == 'CD', 
-                                     session == 1) %>% pull(age),
+                                     session == 1) %>% dplyr::pull(age),
   y = questionnaires_long %>% filter(group == 'KD',
-                                     session == 1) %>% pull(age),
+                                     session == 1) %>% dplyr::pull(age),
                         exact = FALSE)
 age_diff
 
@@ -526,12 +526,12 @@ BMI_session_KD <- yuend(questionnaires_long %>%
                            filter(group == 'KD', 
                                   session == 1) %>%
                            arrange(participant_id) %>%
-                           pull(BMI),
+                          dplyr::pull(BMI),
                          questionnaires_long %>% 
                            filter(group == 'KD', 
                                   session == 2) %>%
                            arrange(participant_id) %>%
-                           pull(BMI),
+                          dplyr::pull(BMI),
                          tr = 0.2)
 BMI_session_KD
 
@@ -540,12 +540,12 @@ BMI_session_CD <- yuend(questionnaires_long %>%
                            filter(group == 'CD', 
                                   session == 1) %>%
                            arrange(participant_id) %>%
-                           pull(BMI),
+                          dplyr::pull(BMI),
                          questionnaires_long %>% 
                            filter(group == 'CD', 
                                   session == 2) %>%
                            arrange(participant_id) %>%
-                           pull(BMI),
+                          dplyr::pull(BMI),
                          tr = 0.2)
 BMI_session_CD
 
@@ -616,14 +616,14 @@ task_switch_speed <- taskswitch_ready %>%
   filter(error == FALSE,
          !(participant_id %in% taskswitch_exclude$participant_id)) %>%
   summarise(speed_off_prop = mean(response_time < 300 | response_time > 3000)) %>%
-  pull(speed_off_prop)
+  dplyr::pull(speed_off_prop)
 task_switch_speed
 
 # Excluded RT trials because being too fast or too slow (ACC analyses)
 task_switch_speed_acc <- taskswitch_ready %>%
   filter(!(participant_id %in% taskswitch_exclude$participant_id)) %>%
   summarise(speed_off_prop = mean(response_time < 300 | response_time > 3000)) %>%
-  pull(speed_off_prop)
+  dplyr::pull(speed_off_prop)
 task_switch_speed_acc
 
 # - Trial comparison 1 ---------------------------
@@ -3088,7 +3088,7 @@ outlying_trials <- taskswitch_mixed_rt %>%
   }) %>%
   ungroup() %>%
   summarise(outliers_prop = mean(outlier, na.rm = TRUE)) %>%
-  pull(outliers_prop)
+  dplyr::pull(outliers_prop)
 outlying_trials
 
 # - Visualise average RT -----------------------
@@ -4052,6 +4052,71 @@ ggsave(
   units = 'in'
 )
 
+# CHANGE SCORES #
+# ===================== #
+
+glimpse(ts_agg_er_wide)
+
+# Density
+ggplot(ts_agg_er_wide, aes(x = incongruence_cost_change, 
+                           colour = group, 
+                           fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'Incongruence Cost Change Scores (Accuracy)',
+       y = 'Density',
+       fill = 'Group',
+       title = 'Incongruence Cost Change Scores Distributions by Group') +
+  theme_minimal()
+
+# Boxplots
+# - Error bars: between-subject SE of trimmed mean
+gg_incongrer_change <- ggplot(ts_agg_er_wide, aes(x = group,
+                                                 y = incongruence_cost_change,
+                                                 colour = group,
+                                                 fill = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(
+    aes(fill = group, colour = group),
+    width = 0.05,         
+    height = 0,          
+    alpha = 0.6,
+    size = 2      
+  ) +
+  stat_summary(fun = function(z) mean(z, trim = 0.2, na.rm = TRUE), geom = 'point',
+               shape = 18, size = 4, colour = 'black',
+               show.legend = FALSE) +
+  stat_summary(aes(group = group),
+               fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  labs(x = 'Group',
+       y = 'Incongruence Cost Change Score (Accuracy: p.p.)',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa() +
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'incongrer_change.pdf'),
+  plot = gg_incongrer_change,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
 # - Trimmed average RT ------------------
 
 # Trimmed ANOVA
@@ -4123,11 +4188,11 @@ print(ts_agg_rt %>%
 avgrt_baseline_bf <- ttestBF(x = ts_agg_rt %>% 
                              filter(session == 1, 
                                     group == 'CD') %>%
-                             pull(average_rt),
+                             dplyr::pull(average_rt),
                            y = ts_agg_rt %>% 
                              filter(session == 1, 
                                     group == 'KD') %>%
-                             pull(average_rt),
+                             dplyr::pull(average_rt),
                            rscale = 'medium')
 avgrt_baseline_bf
 
@@ -4135,11 +4200,11 @@ avgrt_baseline_bf
 avgrt_baseline_bf_smaller <- ttestBF(x = ts_agg_rt %>% 
                                filter(session == 1, 
                                       group == 'CD') %>%
-                               pull(average_rt),
+                               dplyr::pull(average_rt),
                              y = ts_agg_rt %>% 
                                filter(session == 1, 
                                       group == 'KD') %>%
-                               pull(average_rt),
+                               dplyr::pull(average_rt),
                              rscale = 0.5)
 avgrt_baseline_bf_smaller
 
@@ -4147,11 +4212,11 @@ avgrt_baseline_bf_smaller
 avgrt_baseline_bf_small <- ttestBF(x = ts_agg_rt %>% 
                                        filter(session == 1, 
                                               group == 'CD') %>%
-                                       pull(average_rt),
+                                     dplyr::pull(average_rt),
                                      y = ts_agg_rt %>% 
                                        filter(session == 1, 
                                               group == 'KD') %>%
-                                       pull(average_rt),
+                                     dplyr::pull(average_rt),
                                      rscale = 0.3)
 avgrt_baseline_bf_small
 
@@ -4686,11 +4751,11 @@ ggsave(
 switchrt_baseline_bf <- ttestBF(x = ts_agg_rt %>% 
                                   filter(session == 1, 
                                          group == 'CD') %>%
-                                  pull(switch_cost),
+                                  dplyr::pull(switch_cost),
                                 y = ts_agg_rt %>% 
                                   filter(session == 1, 
                                          group == 'KD') %>%
-                                  pull(switch_cost),
+                                  dplyr::pull(switch_cost),
                                 rscale = 'medium')
 switchrt_baseline_bf
 
@@ -5004,11 +5069,11 @@ ggsave(
 incongrrt_baseline_bf <- ttestBF(x = ts_agg_rt %>% 
                                   filter(session == 1, 
                                          group == 'CD') %>%
-                                  pull(incongruence_cost),
+                                   dplyr::pull(incongruence_cost),
                                 y = ts_agg_rt %>% 
                                   filter(session == 1, 
                                          group == 'KD') %>%
-                                  pull(incongruence_cost),
+                                  dplyr::pull(incongruence_cost),
                                 rscale = 'medium')
 incongrrt_baseline_bf
 
@@ -5083,11 +5148,11 @@ print(ts_agg_er %>%
 avger_baseline_bf <- ttestBF(x = ts_agg_er %>% 
                                filter(session == 1, 
                                       group == 'CD') %>%
-                               pull(average_acc),
+                               dplyr::pull(average_acc),
                              y = ts_agg_er %>% 
                                filter(session == 1, 
                                       group == 'KD') %>%
-                               pull(average_acc),
+                               dplyr::pull(average_acc),
                              rscale = 'medium')
 avger_baseline_bf
 
@@ -5095,11 +5160,11 @@ avger_baseline_bf
 avger_baseline_bf_smaller <- ttestBF(x = ts_agg_er %>% 
                                filter(session == 1, 
                                       group == 'CD') %>%
-                               pull(average_acc),
+                                 dplyr::pull(average_acc),
                              y = ts_agg_er %>% 
                                filter(session == 1, 
                                       group == 'KD') %>%
-                               pull(average_acc),
+                               dplyr::pull(average_acc),
                              rscale = 0.5)
 avger_baseline_bf_smaller
 
@@ -5107,11 +5172,11 @@ avger_baseline_bf_smaller
 avger_baseline_bf_small <- ttestBF(x = ts_agg_er %>% 
                                filter(session == 1, 
                                       group == 'CD') %>%
-                               pull(average_acc),
+                                 dplyr::pull(average_acc),
                              y = ts_agg_er %>% 
                                filter(session == 1, 
                                       group == 'KD') %>%
-                               pull(average_acc),
+                               dplyr::pull(average_acc),
                              rscale = 0.3)
 avger_baseline_bf_small
 
@@ -5598,11 +5663,11 @@ ggsave(
 switcher_baseline_bf <- ttestBF(x = ts_agg_er %>% 
                                    filter(session == 1, 
                                           group == 'CD') %>%
-                                   pull(switch_cost),
+                                  dplyr::pull(switch_cost),
                                  y = ts_agg_er %>% 
                                    filter(session == 1, 
                                           group == 'KD') %>%
-                                   pull(switch_cost),
+                                  dplyr::pull(switch_cost),
                                  rscale = 'medium')
 switcher_baseline_bf
 
@@ -5912,11 +5977,11 @@ ggsave(
 incongrer_baseline_bf <- ttestBF(x = ts_agg_er %>% 
                                filter(session == 1, 
                                       group == 'CD') %>%
-                               pull(incongruence_cost),
+                                 dplyr::pull(incongruence_cost),
                              y = ts_agg_er %>% 
                                filter(session == 1, 
                                       group == 'KD') %>%
-                               pull(incongruence_cost),
+                               dplyr::pull(incongruence_cost),
                              rscale = 'medium')
 incongrer_baseline_bf
 
@@ -6220,12 +6285,12 @@ ASRS_session_KD <- yuend(questionnaires_long %>%
                            filter(group == 'KD', 
                                   session == 1) %>%
                            arrange(participant_id) %>%
-                           pull(ASRS),
+                           dplyr::pull(ASRS),
                          questionnaires_long %>% 
                            filter(group == 'KD', 
                                   session == 2) %>%
                            arrange(participant_id) %>%
-                           pull(ASRS),
+                           dplyr::pull(ASRS),
                          tr = 0.2)
 ASRS_session_KD
 
@@ -6234,12 +6299,12 @@ ASRS_session_CD <- yuend(questionnaires_long %>%
                            filter(group == 'CD', 
                                   session == 1) %>%
                            arrange(participant_id) %>%
-                           pull(ASRS),
+                           dplyr::pull(ASRS),
                          questionnaires_long %>% 
                            filter(group == 'CD', 
                                   session == 2) %>%
                            arrange(participant_id) %>%
-                           pull(ASRS),
+                           dplyr::pull(ASRS),
                          tr = 0.2)
 ASRS_session_CD
 
@@ -6573,11 +6638,11 @@ ggsave(
 ASRS_baseline_bf_medium <- ttestBF(x = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'CD') %>%
-                              pull(ASRS),
+                                dplyr::pull(ASRS),
                             y = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'KD') %>%
-                              pull(ASRS),
+                              dplyr::pull(ASRS),
                             rscale = 'medium')
 ASRS_baseline_bf_medium
 
@@ -6585,11 +6650,11 @@ ASRS_baseline_bf_medium
 ASRS_baseline_bf_small <- ttestBF(x = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'CD') %>%
-                              pull(ASRS),
+                                dplyr::pull(ASRS),
                             y = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'KD') %>%
-                              pull(ASRS),
+                              dplyr::pull(ASRS),
                             rscale = 0.5)
 ASRS_baseline_bf_small
 
@@ -6597,11 +6662,11 @@ ASRS_baseline_bf_small
 ASRS_baseline_bf_tiny <- ttestBF(x = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'CD') %>%
-                              pull(ASRS),
+                                dplyr::pull(ASRS),
                             y = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'KD') %>%
-                              pull(ASRS),
+                              dplyr::pull(ASRS),
                             rscale = 0.3)
 ASRS_baseline_bf_tiny
 
@@ -6927,8 +6992,8 @@ PSQI_ranked_anova
 # --------------------------------------------- #
 
 # Permutation test - testing the equality of distributions
-PSQI_perm <- permg(PSQI_wide %>% filter(group == 'CD') %>% pull(PSQI_change),
-                   PSQI_wide %>% filter(group == 'KD') %>% pull(PSQI_change),
+PSQI_perm <- permg(PSQI_wide %>% filter(group == 'CD') %>% dplyr::pull(PSQI_change),
+                   PSQI_wide %>% filter(group == 'KD') %>% dplyr::pull(PSQI_change),
                    alpha = 0.05, est = var, nboot = 10000)
 PSQI_perm
 
@@ -7185,11 +7250,11 @@ ggsave(
 PSQI_baseline_bf <- ttestBF(x = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'CD') %>%
-                              pull(PSQI),
+                              dplyr::pull(PSQI),
                             y = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'KD') %>%
-                              pull(PSQI),
+                              dplyr::pull(PSQI),
                             rscale = 'medium')
 PSQI_baseline_bf
 
@@ -7440,9 +7505,9 @@ BDI_quant_baseline
 
 # Compare variances
 BDI_perm <- permg(questionnaires_long %>% filter(session == 1,
-                                                  group == 'CD') %>% pull(BDI),
+                                                  group == 'CD') %>% dplyr::pull(BDI),
                    questionnaires_long %>% filter(session == 1, 
-                                                  group == 'KD') %>% pull(BDI),
+                                                  group == 'KD') %>% dplyr::pull(BDI),
                    alpha = 0.05, est = var, nboot = 10000)
 BDI_perm
 
@@ -7450,11 +7515,11 @@ BDI_perm
 BDI_ks_baseline <- ks.test(questionnaires_long %>% 
                              filter(session == 1,
                                     group == 'CD') %>% 
-                             pull(BDI),
+                             dplyr::pull(BDI),
                            questionnaires_long %>% 
                              filter(session == 1,
                                     group == 'KD') 
-                           %>% pull(BDI),
+                           %>% dplyr::pull(BDI),
                            alternative = 'two.sided',
                            simulate.p.value = TRUE,
                            B = 10000)
@@ -7786,11 +7851,11 @@ ggsave(
 BDI_baseline_bf <- ttestBF(x = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'CD') %>%
-                              pull(BDI),
+                             dplyr::pull(BDI),
                             y = questionnaires_long %>% 
                               filter(session == 1, 
                                      group == 'KD') %>%
-                              pull(BDI),
+                             dplyr::pull(BDI),
                             rscale = 'medium')
 BDI_baseline_bf
 
@@ -8153,9 +8218,9 @@ ASRS_respost_quant
 
 # Regular t-test
 ASRS_respost_ttest <- t.test(balanced_ASRS %>% filter(group == 'CD') %>%
-                               pull(ASRS_2_res),
+                               dplyr::pull(ASRS_2_res),
                              balanced_ASRS %>% filter(group == 'KD') %>%
-                               pull(ASRS_2_res))
+                               dplyr::pull(ASRS_2_res))
 ASRS_respost_ttest
 
 # - PSQI adjusted ------------------
