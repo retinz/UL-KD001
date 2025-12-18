@@ -124,7 +124,7 @@ digit_repetitions <- data_filter %>%
   ungroup() %>%
   filter(!trial == 1) %>%
   summarise(digit_rep = mean(digit_transition == 'repeat', na.rm = TRUE)) %>%
-  pull(digit_rep)
+  dplyr::pull(digit_rep)
 digit_repetitions
 
 # SAVE DATA -----------------------
