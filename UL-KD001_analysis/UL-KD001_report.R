@@ -7,11 +7,43 @@
 # ===================== #
 
 library(gt)
+library(here)
+library(BayesFactor)
+library(scales)
+library(ggbeeswarm)
+library(ARTool)
+library(WRS)
+library(WRS2)
+library(afex)
+library(lmtest)
+library(DHARMa)
+library(glmmTMB)
+library(lme4)
+library(lmerTest)
+library(robustlmm)
+library(broom.mixed)
+library(emmeans)
+library(broom)
+library(performance)
+library(cv)
+library(clubSandwich)
+library(effectsize)
+library(MatchIt)
+library(cobalt)
+library(correlation)
+library(estimatr)
+source(here('UL-KD001_analysis', 'analysis_helpers.R'))
 
 # LOAD WORKSPACE #
 # ===================== #
 
+# Load a generated workspace of the analysis
 load('UL-KD001_analysis.RData')
+
+# Create directory if it doesn't exist
+if (!dir.exists(here('UL-KD001_analysis', 'tables'))) {
+  dir.create(here('UL-KD001_analysis', 'tables'))
+}
 
 # AGE ----------------
 
@@ -139,7 +171,8 @@ ASRS_keto_2_table <- ASRS_keto_2_coeffs$regci %>%
   )
 
 gtsave(data = ASRS_keto_2_table, 
-       filename = 'ASRS_keto_2_table.png', path = 'tables/')
+       filename = 'ASRS_keto_2_table.png', path = here('UL-KD001_analysis', 'tables'))
+
 # Screener no. 2 ------------------------
 
 screener_2 <- partial_coeffs_extract_2 %>%
@@ -182,7 +215,7 @@ screener_2 <- partial_coeffs_extract_2 %>%
   )
 
 gtsave(data = screener_2, 
-       filename = 'screener_2.png', path = 'tables/')
+       filename = 'screener_2.png', path = here('UL-KD001_analysis', 'tables'))
 
 # Moderation Spearman --------------------
 
@@ -202,7 +235,7 @@ moderation_spear <- basechange_coeffs_all_spear %>%
       X == 'BDI_1' ~ 'BDI Pretest',
       X == 'PSQI_1' ~ 'PSQI Pretest',
       X == 'switch_cost_rt_1' ~ 'Switch RT Pretest',
-      X == 'incongruence_cost_rt_1' ~ 'Incongr. RT  Pretest',
+      X == 'incongruence_cost_rt_1' ~ 'Incongr. RT Pretest',
       X == 'switch_cost_acc_1' ~ 'Switch ACC Pretest',
       X == 'incongruence_cost_acc_1' ~ 'Incongr. ACC Pretest',
     )) %>%
@@ -241,7 +274,8 @@ moderation_spear <- basechange_coeffs_all_spear %>%
   )
 
 gtsave(data = moderation_spear, 
-       filename = 'moderation_spear.png', path = 'tables/')
+       filename = 'moderation_spear.png', path = here('UL-KD001_analysis', 'tables'))
+
 # Mixed-Effects RT ---------------
 
 mixed_eff_rt <- broom.mixed::tidy(taskswitch_mm_10b_rt,
@@ -283,7 +317,7 @@ mixed_eff_rt <- broom.mixed::tidy(taskswitch_mm_10b_rt,
   )
 
 gtsave(data = mixed_eff_rt, 
-       filename = 'mixed_eff_rt.png', path = 'tables/')
+       filename = 'mixed_eff_rt.png', path = here('UL-KD001_analysis', 'tables'))
 
 # Mixed-Effects ACC ---------------
 
@@ -328,7 +362,8 @@ mixed_eff_acc <- broom.mixed::tidy(taskswitch_mm_5_er,
   )
 
 gtsave(data = mixed_eff_acc, 
-       filename = 'mixed_eff_acc.png', path = 'tables/')
+       filename = 'mixed_eff_acc.png', path = here('UL-KD001_analysis', 'tables'))
+
 # Questionnaires descriptives --------------------
 
 quest_desc <- questionnaires_trwin %>%
@@ -365,7 +400,7 @@ quest_desc <- questionnaires_trwin %>%
   )
 
 gtsave(data = quest_desc, 
-       filename = 'quest_desc.png', path = './tables')
+       filename = 'quest_desc.png', path = here('UL-KD001_analysis', 'tables'))
 
 # Task-switching RT descriptives ----------------
 
@@ -409,7 +444,8 @@ taskswitch_rt_desc <- taskswitch_rt_trwin %>%
   )
 
 gtsave(data = taskswitch_rt_desc, 
-       filename = 'taskswitch_rt_desc.png', path = './tables')
+       filename = 'taskswitch_rt_desc.png', path = here('UL-KD001_analysis', 'tables'))
+
 # Task-switching ACC descriptives ----------------
 
 taskswitch_acc_desc <- taskswitch_er_trwin %>%
@@ -452,4 +488,4 @@ taskswitch_acc_desc <- taskswitch_er_trwin %>%
   )
 
 gtsave(data = taskswitch_acc_desc, 
-       filename = 'taskswitch_acc_desc.png', path = './tables')
+       filename = 'taskswitch_acc_desc.png', path = here('UL-KD001_analysis', 'tables'))
