@@ -4,15 +4,6 @@
 # Preprocessing questionnaire data for UL-KD001, starting with already
 # pseudo-anonymised data.
 
-# TASKS 
-# ===================== #
-
-# - Add the calculation of the no. of participants who finished pretest
-# - Adjust the loading of the RDS from this script to taskswitch_prep
-
-# - Check if the above has been done
-# - Adjust data loading (using here())
-
 # NOTES 
 # ===================== #
 
@@ -1953,6 +1944,13 @@ CD_post_check_3
 
 # Pretest before filtering
 count_kd_apr_24_pre <- kd_apr_24_pre_FRESH %>%
+  mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
+  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(BMI >= 18.5 & BMI < 30,
+         sex == 'female',
+         age >= 35 & age <= 45
+  ) %>%
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
   filter(finished) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
@@ -1961,6 +1959,13 @@ count_kd_apr_24_pre <- kd_apr_24_pre_FRESH %>%
 # Posttest before filtering
 count_kd_apr_24_post <- kd_apr_24_combined %>%
   filter(finished_pre, finished_post) %>%
+  mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
+  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(BMI_pre >= 18.5 & BMI_pre < 30,
+         sex == 'female',
+         age >= 35 & age <= 45
+  ) %>%
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
@@ -1980,6 +1985,13 @@ cat('KD April 24: Final no. of participants =', count_kd_apr_24_final, '\n')
 
 # Pretest before filtering
 count_kd_sep_24_pre <- kd_sep_24_pre_FRESH %>%
+  mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
+  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(BMI >= 18.5 & BMI < 30,
+         sex == 'female',
+         age >= 35 & age <= 45
+  ) %>%
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
   filter(finished) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
@@ -1988,6 +2000,13 @@ count_kd_sep_24_pre <- kd_sep_24_pre_FRESH %>%
 # Posttest before filtering
 count_kd_sep_24_post <- kd_sep_24_combined %>%
   filter(finished_pre, finished_post) %>%
+  mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
+  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(BMI_pre >= 18.5 & BMI_pre < 30,
+         sex == 'female',
+         age >= 35 & age <= 45
+  ) %>%
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
@@ -2008,6 +2027,13 @@ cat('KD September 24: Final no. of participants =', count_kd_sep_24_final, '\n')
 # Pretest before filtering
 count_kd_jan_25_pre <- kd_jan_25_pre_FRESH %>%
   filter(finished) %>%
+  mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
+  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(BMI >= 18.5 & BMI < 30,
+         sex == 'female',
+         age >= 35 & age <= 45
+  ) %>%
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
@@ -2015,6 +2041,13 @@ count_kd_jan_25_pre <- kd_jan_25_pre_FRESH %>%
 # Posttest before filtering
 count_kd_jan_25_post <- kd_jan_25_combined %>%
   filter(finished_pre, finished_post) %>%
+  mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
+  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(BMI_pre >= 18.5 & BMI_pre < 30,
+         sex == 'female',
+         age >= 35 & age <= 45
+  ) %>%
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
@@ -2035,6 +2068,13 @@ cat('KD January 25: Final no. of participants =', count_kd_jan_25_final, '\n')
 # Pretest before filtering
 count_cd_25_pre <- cd_25_pre_FRESH %>%
   filter(finished) %>%
+  mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
+  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(BMI >= 18.5 & BMI < 30,
+         sex == 'female',
+         age >= 35 & age <= 45
+  ) %>%
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
@@ -2042,6 +2082,13 @@ count_cd_25_pre <- cd_25_pre_FRESH %>%
 # Posttest before filtering
 count_cd_25_post <- cd_25_combined %>%
   filter(finished_pre, finished_post) %>%
+  mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
+  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(BMI_pre >= 18.5 & BMI_pre < 30,
+         sex == 'female',
+         age >= 35 & age <= 45
+  ) %>%
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
   filter(!(participant_id == '' | participant_id == ' ')) %>% # Remove empty participant IDs
   summarise(count_id = length(unique(participant_id))) %>%
   pull(count_id)
