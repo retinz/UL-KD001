@@ -489,3 +489,44 @@ taskswitch_acc_desc <- taskswitch_er_trwin %>%
 
 gtsave(data = taskswitch_acc_desc, 
        filename = 'taskswitch_acc_desc.png', path = here('UL-KD001_analysis', 'tables'))
+# Conventional ANOVAs table -------------
+
+conventional_anovas <- effects_conventional_all %>%
+  mutate(across(c('MSE', 'statistic', 'pes'), 
+                ~ round(.x, 2)),
+         p.adj = round(p.adj, 3)) %>%
+  arrange(response, term) %>%
+  gt() %>%
+  cols_label(
+    response = 'Response',
+    term = 'Effect',
+    num.Df = 'DF Numer.',
+    den.Df = 'DF Denom.',
+    MSE = 'MSE',
+    statistic = 'F',
+    pes = 'η',
+    p.value = 'P-Value',
+    p.adj = 'Adjusted P-Value'
+  ) %>%
+  tab_options(
+    # General look
+    table.font.color = 'black',
+    table.border.top.color = 'black',
+    heading.border.bottom.color = 'black',
+    heading.title.font.size = 20,
+    table_body.border.bottom.color = 'black',
+    column_labels.border.top.color = 'black',
+    column_labels.border.bottom.color = 'black',
+    column_labels.padding.horizontal = px(15),
+    data_row.padding.horizontal = px(15),
+    table.font.size = 20,
+    data_row.padding = px(10),
+    table.width = pct(80),
+    table.align = "center",
+    table_body.hlines.width = px(0),
+    stub.border.width = px(0),
+    column_labels.padding = px(10)
+  )
+
+gtsave(data = conventional_anovas, 
+       filename = 'conventional_anovas.png', path = here('UL-KD001_analysis', 'tables'))

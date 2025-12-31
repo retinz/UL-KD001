@@ -9634,3 +9634,15 @@ effects_conventional_int <- imap(conventional_list,
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH'))
 print(effects_conventional_int, n = Inf)
+
+# CONCATENATION #
+# ====================== #
+
+# Large tibble 
+effects_conventional_all <- bind_rows(
+  effects_conventional_group,
+  effects_conventional_sess,
+  effects_conventional_int
+)
+
+
