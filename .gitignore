@@ -16,6 +16,7 @@ UL-KD001_anonymiser.R
 *.zip
 *.jpg
 *.Rproj
+*.Rprofile
 
 # Directories 
 original_pipe/
