@@ -12,23 +12,20 @@ compromise.
 
 ```r
 
-The file can be read as:
-
-  graph <- readRDS('rang_graph.rds')
+# The file can be read as:
+graph <- readRDS('rang_graph.rds')
   
-Additionally, the specific packages can be installed as (not tested):
+# Additionally, the specific packages can be installed as (not tested):
+pkgs <- paste0(graph$pkgs$package, '@', graph$pkgs$version)
+pak::pkg_install(pkgs)
 
-  pkgs <- paste0(graph$pkgs$package, '@', graph$pkgs$version)
-  pak::pkg_install(pkgs)
+# In the future, it may be possible to run the following for more convenience:
+rang::export_renv(graph)
+rang::dockerize(graph)
 
-In the future, it may be possible to run the following for more convenience:
+# Currently, the above fails. 
 
-  rang::export_renv(graph)
-  rang::dockerize(graph)
-
-Currently, the above fails. 
-
-The WRS package doesn't come from CRAN but can be downloaded from: https://github.com/nicebread/WRS. 
+# The WRS package doesn't come from CRAN but can be downloaded from: https://github.com/nicebread/WRS. 
 
 ```
 
