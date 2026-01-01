@@ -104,6 +104,7 @@
 
 # The order of libraries somewhat matters!
 
+library(rang)
 library(here)
 library(BayesFactor)
 library(scales)
@@ -130,6 +131,8 @@ library(cobalt)
 library(correlation)
 library(estimatr)
 source(here('UL-KD001_analysis', 'analysis_helpers.R'))
+
+# The WRS package doesn't come from CRAN but can be downloaded from: https://github.com/nicebread/WRS. 
 
 # SESSION SETTINGS #
 # ===================== #
