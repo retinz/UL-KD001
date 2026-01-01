@@ -1784,7 +1784,11 @@ glimpse(dataset_start)
 unique(dataset_start$current_diet_text)
 
 dataset_diettext <- dataset_start %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk'))
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  ))
 
 # - Filter based on ketones -------------------------
 
@@ -1945,7 +1949,11 @@ CD_post_check_3
 # Pretest before filtering
 count_kd_apr_24_pre <- kd_apr_24_pre_FRESH %>%
   mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   filter(BMI >= 18.5 & BMI < 30,
          sex == 'female',
          age >= 35 & age <= 45
@@ -1960,7 +1968,11 @@ count_kd_apr_24_pre <- kd_apr_24_pre_FRESH %>%
 count_kd_apr_24_post <- kd_apr_24_combined %>%
   filter(finished_pre, finished_post) %>%
   mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   filter(BMI_pre >= 18.5 & BMI_pre < 30,
          sex == 'female',
          age >= 35 & age <= 45
@@ -1986,7 +1998,11 @@ cat('KD April 24: Final no. of participants =', count_kd_apr_24_final, '\n')
 # Pretest before filtering
 count_kd_sep_24_pre <- kd_sep_24_pre_FRESH %>%
   mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   filter(BMI >= 18.5 & BMI < 30,
          sex == 'female',
          age >= 35 & age <= 45
@@ -2001,7 +2017,11 @@ count_kd_sep_24_pre <- kd_sep_24_pre_FRESH %>%
 count_kd_sep_24_post <- kd_sep_24_combined %>%
   filter(finished_pre, finished_post) %>%
   mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   filter(BMI_pre >= 18.5 & BMI_pre < 30,
          sex == 'female',
          age >= 35 & age <= 45
@@ -2028,7 +2048,11 @@ cat('KD September 24: Final no. of participants =', count_kd_sep_24_final, '\n')
 count_kd_jan_25_pre <- kd_jan_25_pre_FRESH %>%
   filter(finished) %>%
   mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   filter(BMI >= 18.5 & BMI < 30,
          sex == 'female',
          age >= 35 & age <= 45
@@ -2042,7 +2066,11 @@ count_kd_jan_25_pre <- kd_jan_25_pre_FRESH %>%
 count_kd_jan_25_post <- kd_jan_25_combined %>%
   filter(finished_pre, finished_post) %>%
   mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   filter(BMI_pre >= 18.5 & BMI_pre < 30,
          sex == 'female',
          age >= 35 & age <= 45
@@ -2069,7 +2097,11 @@ cat('KD January 25: Final no. of participants =', count_kd_jan_25_final, '\n')
 count_cd_25_pre <- cd_25_pre_FRESH %>%
   filter(finished) %>%
   mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   filter(BMI >= 18.5 & BMI < 30,
          sex == 'female',
          age >= 35 & age <= 45
@@ -2083,7 +2115,11 @@ count_cd_25_pre <- cd_25_pre_FRESH %>%
 count_cd_25_post <- cd_25_combined %>%
   filter(finished_pre, finished_post) %>%
   mutate(current_diet = str_replace_all(current_diet, ' ', '_')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   filter(BMI_pre >= 18.5 & BMI_pre < 30,
          sex == 'female',
          age >= 35 & age <= 45
@@ -2162,7 +2198,11 @@ eligible_posttest <- unfiltered_datasets %>%
   filter(sex == 'female', age >= 35 & age <= 45) %>%
   # Diet exclusions
   filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   # Finished both Pretest and Posttest
   filter(
     (cohort %in% c('apr_24', 'sep_24', 'jan_25', 'cd_25') &
@@ -2180,7 +2220,11 @@ measured_ketones <- unfiltered_datasets %>%
   filter(sex == 'female', age >= 35 & age <= 45) %>%
   # Diet exclusions
   filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   # Finished both Pretest and Posttest
   filter(
     (cohort %in% c('apr_24', 'sep_24', 'jan_25', 'cd_25') &
@@ -2200,7 +2244,11 @@ measured_ketones <- unfiltered_datasets %>%
 ketones_missing_out <- dataset_start %>%
   # Diet exclusions only - other filters already implemented (incl. ketone missingness)
   filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
-  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  filter(is.na(current_diet_text) | !current_diet_text %in% c(
+    'glutenvrij, en lactose en koolhydraat arm',
+    'Orthomoleculair paleo',
+    'Oersterk'
+  )) %>%
   count(group) %>%
   ungroup() %>%
   as_tibble()
