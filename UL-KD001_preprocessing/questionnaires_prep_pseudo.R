@@ -2154,91 +2154,8 @@ unfiltered_datasets <- bind_rows(
   cd_25_combined
 ) %>% filter(!(participant_id == '' | participant_id == ' '))
 
-# Finished both Pretest and Posttest
-finished <- unfiltered_datasets %>%
-  filter(
-    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       finished_pre & finished_post) |
-      (cohort == 'cd_25' &
-         finished_pre & finished_post)
-  ) %>%
-  count(group) %>%
-  ungroup() %>%
-  as_tibble()
-
-# Measured ketones
-measured_ketones <- unfiltered_datasets %>%
-  filter(
-    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       finished_pre & finished_post) |
-      (cohort == 'cd_25' &
-         finished_pre & finished_post)
-  ) %>%
-  filter(
-    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       measured_ketones_pre & measured_ketones_post) |
-      (cohort == 'cd_25' & measured_ketones_post)
-  ) %>% 
-  count(group) %>%
-  ungroup() %>%
-  as_tibble()
-
-# BMI filter
-BMI_filter <- unfiltered_datasets %>%
-  # Finished, measured filter
-  filter(
-    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       finished_pre & finished_post) |
-      (cohort == 'cd_25' &
-         finished_pre & finished_post)
-  ) %>%
-  filter(
-    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       measured_ketones_pre & measured_ketones_post) |
-      (cohort == 'cd_25' & measured_ketones_post)
-  ) %>% 
-  # BMI filter
-  filter(BMI_pre >= 18.5 & BMI_pre < 30) %>%
-  count(group) %>%
-  ungroup() %>%
-  as_tibble()
-
-# Sex and age filter
-sexage_filter <- unfiltered_datasets %>%
-  # Finished, measured filter
-  filter(
-    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       finished_pre & finished_post) |
-      (cohort == 'cd_25' &
-         finished_pre & finished_post)
-  ) %>%
-  filter(
-    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       measured_ketones_pre & measured_ketones_post) |
-      (cohort == 'cd_25' & measured_ketones_post)
-  ) %>% 
-  # BMI filter
-  filter(BMI_pre >= 18.5 & BMI_pre < 30) %>%
-  # Sex filter 
-  filter(sex == 'female', age >= 35 & age <= 45) %>%
-  count(group) %>%
-  ungroup() %>%
-  as_tibble()
-
-# Diet filters
-diet_filters <- unfiltered_datasets %>%
-  # Finished, measured filter
-  filter(
-    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       finished_pre & finished_post) |
-      (cohort == 'cd_25' &
-         finished_pre & finished_post)
-  ) %>%
-  filter(
-    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
-       measured_ketones_pre & measured_ketones_post) |
-      (cohort == 'cd_25' & measured_ketones_post)
-  ) %>% 
+# General exclusion filter
+eligible_posttest <- unfiltered_datasets %>%
   # BMI filter
   filter(BMI_pre >= 18.5 & BMI_pre < 30) %>%
   # Sex filter 
@@ -2246,6 +2163,35 @@ diet_filters <- unfiltered_datasets %>%
   # Diet exclusions
   filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
   filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  # Finished both Pretest and Posttest
+  filter(
+    (cohort %in% c('apr_24', 'sep_24', 'jan_25', 'cd_25') &
+       finished_pre & finished_post)
+  ) %>%
+  count(group) %>%
+  ungroup() %>%
+  as_tibble()
+
+# Measured ketones
+measured_ketones <- unfiltered_datasets %>%
+  # BMI filter
+  filter(BMI_pre >= 18.5 & BMI_pre < 30) %>%
+  # Sex filter 
+  filter(sex == 'female', age >= 35 & age <= 45) %>%
+  # Diet exclusions
+  filter(!current_diet %in% c('Paleo_dieet', 'Low_carb_dieet')) %>%
+  filter(!(current_diet_text == 'glutenvrij, en lactose en koolhydraat arm' | current_diet_text == 'Orthomoleculair paleo' | current_diet_text == 'Oersterk')) %>%
+  # Finished both Pretest and Posttest
+  filter(
+    (cohort %in% c('apr_24', 'sep_24', 'jan_25', 'cd_25') &
+       finished_pre & finished_post)
+  ) %>%
+  # Measured ketones
+  filter(
+    (cohort %in% c('apr_24', 'sep_24', 'jan_25') &
+       measured_ketones_pre & measured_ketones_post) |
+      (cohort == 'cd_25' & measured_ketones_post)
+  ) %>% 
   count(group) %>%
   ungroup() %>%
   as_tibble()
@@ -2265,15 +2211,9 @@ ketones_out_filter <- dataset_ketout %>%
   ungroup()
 
 cat('No. of participants before filtering: \n')
-finished
+eligible_posttest
 cat('No. of participants who measured ketones: \n')
 measured_ketones
-cat('No. of participants after BMI filter: \n')
-BMI_filter
-cat('No. of participants after sex and age filter: \n')
-sexage_filter
-cat('No. of participants after diet filter: \n')
-diet_filters
 cat('No. of participants after ketone missingness filter: \n')
 ketones_missing_out
 cat('No. of participants after ketone exclusion filter: \n')
