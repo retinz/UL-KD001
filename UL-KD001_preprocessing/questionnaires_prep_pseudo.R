@@ -31,6 +31,7 @@
 # LIBRARIES #
 # ===================== #
 
+library(rang)
 library(here)
 library(zoo)
 library(readxl)
