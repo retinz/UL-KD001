@@ -104,7 +104,6 @@
 
 # The order of libraries somewhat matters!
 
-library(rang)
 library(here)
 library(BayesFactor)
 library(scales)
