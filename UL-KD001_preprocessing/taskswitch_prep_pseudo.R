@@ -28,12 +28,12 @@ relevant_columns <- c('participant_id', 'group_id', 'session', 'date_startdate',
 
 data_trim <- data_raw %>% 
   filter(practice == 'no') %>% 
-  select(all_of(relevant_columns)) %>%
+  dplyr::select(all_of(relevant_columns)) %>%
   distinct() %>%
   mutate(
     error = ifelse(correct == 1, FALSE, TRUE)
   ) %>%
-  select(-c(correct, response, correct_response, 
+  dplyr::select(-c(correct, response, correct_response, 
             date_starttime))
 glimpse(data_trim)
 
@@ -83,6 +83,7 @@ print(check_trials_2, n = Inf)
 # - Trial adjustments ---------------------------
 
 data_chopped <- data_filter %>%
+  # No need to arrange by count_experimental_trial_sequence - already arranged
   group_by(participant_id, session, block_count) %>%
   mutate(
     # Add trials 
@@ -98,7 +99,7 @@ data_chopped <- data_filter %>%
   # Remove repeating digit trials
          !digit_transition == 'repeat') %>%
   # Drop unnecessary columns 
-  select(-group_id) %>%
+  dplyr::select(-group_id) %>%
   rename(trial_sequence = count_experimental_trial_sequence)
 glimpse(data_chopped)
 
@@ -134,3 +135,4 @@ saveRDS(data_chopped, here('UL-KD001_data', 'LBI_clean', 'UL-KD001_taskswitch_ps
 
 # Save as CSV
 write_csv(data_chopped, here('UL-KD001_data', 'LBI_clean', 'UL-KD001_taskswitch_pseudo.csv'))
+
