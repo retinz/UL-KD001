@@ -1695,6 +1695,45 @@ cv_taskswitch_mm_10b_rt <- cv(taskswitch_mm_10b_rt,
 summary(cv_taskswitch_mm_10b_rt)
 plot(cv_taskswitch_mm_10b_rt)
 
+# - glmmTMB log 10b2 (3-way + (ce)variance + 1 covariate + autocorr + RE+||) -------------------
+
+# More complex dispersion formula not needed; this one is maximal 
+taskswitch_mm_10b2_rt <- glmmTMB(
+  log_rt ~ group * session * task_transition + 
+    group * session * congruence + cue_transition +
+    task_transition * congruence +
+    (task_transition + congruence + cue_transition || participant_id) + 
+    ou(trial_sequence_factor + 0 | participant_id:session),
+  dispformula = ~ poly(fitted_m9c, 2) + 
+    session + task_transition * group + cue_transition,
+  data = taskswitch_mixed_rt,
+  family = gaussian()
+)
+summary(taskswitch_mm_10b2_rt)
+
+# Model comparisons #
+# ========================== #
+
+anova(taskswitch_mm_10b2_rt, taskswitch_mm_10b_rt)
+
+# Diagnostics #
+# ========================= #
+
+diagnose_model(taskswitch_mm_10b2_rt)
+
+# Cross validation #
+# ========================= #
+
+# Cluster-based
+cv_taskswitch_mm_10b2_rt <- cv(taskswitch_mm_10b2_rt, 
+                              k = 5, 
+                              clusterVariables = 'participant_id', 
+                              ncores = n_cores,
+                              reps = 10)
+summary(cv_taskswitch_mm_10b2_rt)
+plot(cv_taskswitch_mm_10b2_rt)
+
+
 # - glmmTMB log 10c (3-way + (ce)variance + all task covariates + autocorr + RE+||) -------------------
 
 # More complex dispersion formula not needed; this one is maximal 
