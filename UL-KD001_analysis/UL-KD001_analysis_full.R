@@ -4234,7 +4234,8 @@ avgrt_baseline_bf <- ttestBF(x = ts_agg_rt %>%
                              filter(session == 1, 
                                     group == 'KD') %>%
                              dplyr::pull(average_rt),
-                           rscale = 'medium')
+                           rscale = 'medium', 
+                           nullInterval = c(0.1, Inf))
 avgrt_baseline_bf
 
 # Baseline (r = 0.5)

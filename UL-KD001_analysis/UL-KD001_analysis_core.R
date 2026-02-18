@@ -1,0 +1,2630 @@
+# DESCRIPTION #
+# ===================== #
+
+# The core analysis of UL-KD001 data.
+
+# TASKS #
+# ===================== #
+
+# - ASRS scales analysis
+# - task-switching re-analysis (same model specification, post-error exclusions,
+# task transition * cue transition interaction)
+
+# LIBRARIES #
+# ===================== #
+
+# The order of libraries somewhat matters!
+
+library(here)
+library(ARTool)
+library(WRS)
+library(WRS2)
+library(afex)
+library(DHARMa)
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(broom)
+library(effectsize)
+library(MatchIt)
+library(cobalt)
+library(correlation)
+library(estimatr)
+source(here('UL-KD001_analysis', 'analysis_helpers.R'))
+
+# The WRS package doesn't come from CRAN but can be downloaded from: https://github.com/nicebread/WRS. 
+
+# SESSION SETTINGS #
+# ===================== #
+
+# Set contrasts
+options(contrasts = c('contr.sum', 'contr.poly'))
+
+# Palette
+# - Should be differentiable even by people with a colour-perception disorder
+pal <- c(CD = '#a2bff4', KD = '#80c680')
+
+# Dodge
+dodge_tsmm <- 0.2
+dodge_w <- 0.6
+dodge_w_BMI <- 0.2
+
+# Default directory for plots
+plot_directory <- here('UL-KD001_analysis', 'plots')
+if (!dir.exists(plot_directory)) {
+  dir.create(plot_directory, recursive = TRUE)
+}
+
+# Default directory for tables
+table_directory <- here('UL-KD001_analysis', 'tables')
+if (!dir.exists(table_directory)) {
+  dir.create(table_directory, recursive = TRUE)
+}
+
+# Data path
+data_path <- here('UL-KD001_data', 'LBI_clean')
+
+# LOAD DATA -------------------------
+
+# QUESTIONNAIRES #
+# ================================ #
+
+# Load questionnaire RDS
+questionnaires_data <- readRDS(file.path(data_path, 'UL-KD001_questionnaires_pseudo.rds'))
+
+# Adjust columns
+questionnaires_ready <- questionnaires_data %>%
+  mutate(
+    group = factor(group, levels = c('CD', 'KD')),
+    cohort = factor(cohort, levels = c('apr_24', 'sep_24', 'jan_25', 'cd_25'))
+  ) %>%
+  mutate(ASRS_IA_pre = rowSums(across(matches('^ASRS_([1-4])_pre$')), na.rm = TRUE),
+         ASRS_IA_post = rowSums(across(matches('^ASRS_([1-4])_post$')), na.rm = TRUE),
+         ASRS_H_pre = rowSums(across(matches('^ASRS_([5-6])_pre$')), na.rm = TRUE),
+         ASRS_H_post = rowSums(across(matches('^ASRS_([5-6])_post$')), na.rm = TRUE)
+  ) %>%
+  dplyr::select(participant_id, group, cohort, age, BMI_pre, BMI_post,
+         ASRS_total_pre, ASRS_total_post, BDI_total_pre, BDI_total_post, PSQI_total_pre,
+         PSQI_total_post, ASRS_IA_pre, ASRS_IA_post, ASRS_H_pre, ASRS_H_post)
+
+# TASK-SWITCHING #
+# ================================ #
+
+# Load task-switching RDS 
+taskswitch_data <- readRDS(file.path(data_path, 'UL-KD001_taskswitch_pseudo.rds'))
+
+# Adjust columns
+taskswitch_ready <- taskswitch_data %>%
+  mutate(
+    group = factor(group, levels = c('CD', 'KD')),
+    cohort = factor(cohort, levels = c('apr_24', 'sep_24', 'jan_25', 'cd_25')),
+    session = factor(session, levels = c(1, 2)),
+    task = factor(task, levels = c('p', 'm'), labels = c('parity', 'magnitude')),
+    congruence = factor(congruence, levels = c('c', 'i'), 
+                        labels = c('congruent', 'incongruent')),
+    task_transition = factor(task_transition, levels = c('repeat', 'switch')),
+    cue_transition = factor(cue_transition, levels = c('repeat' , 'switch'))
+  )
+
+# QUESTIONNAIRES + KETONES #
+# ================================ #
+
+# Adjust columns
+ketones_tibble <- questionnaires_data %>%
+  mutate(
+    group = factor(group, levels = c('CD', 'KD')),
+    cohort = factor(cohort, levels = c('apr_24', 'sep_24', 'jan_25', 'cd_25')),
+  ) %>%
+  dplyr::select(participant_id, group, cohort, ketones_pre, starts_with('ketones_post_int_'))
+glimpse(ketones_tibble)
+
+# QUESTIONNAIRES PREPARATION ------------------
+
+glimpse(questionnaires_ready)
+
+# Reshape tibble
+questionnaires_long <- questionnaires_ready %>%
+  pivot_longer(cols = matches('_(pre|post)$'),
+               names_to = c('measure', 'session'),
+               names_pattern = '(.*)_(pre|post)$',
+               values_to = 'value') %>%
+  mutate(session = if_else(session == 'pre', 1, 2),
+         measure = str_remove(measure, '_total$')) %>%
+  pivot_wider(
+    names_from = measure,
+    values_from = value
+  ) %>%
+  mutate(session = factor(session, levels = c(1, 2)))
+glimpse(questionnaires_long)
+
+# Get number of participants
+participants_n_questionnaires <- questionnaires_long %>%
+  group_by(group) %>%
+  summarise(n_participants = n_distinct(participant_id)) %>%
+  ungroup()
+participants_n_questionnaires
+
+# Get robust descriptives
+questionnaires_trwin <- trim_winsorise(questionnaires_long, 
+                                       dv_colnames = c('ASRS', 
+                                                       'BDI',
+                                                       'PSQI',
+                                                       'BMI',
+                                                       'ASRS_IA',
+                                                       'ASRS_H'),
+                                       within = 'session',
+                                       between = 'group',
+                                       id = 'participant_id',
+                                       tr = 0.2)
+print(questionnaires_trwin, width = Inf)
+
+# DEMOGRAPHICS ---------------------------
+
+glimpse(questionnaires_long)
+
+# - Assess age -------------------
+
+# Age distributions #
+# ----------------------- #
+
+ggplot(questionnaires_long, aes(x = age, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'Age',
+       y = 'Density',
+       fill = 'Group',
+       title = 'Age Distributions by Group and Session') +
+  theme_minimal()
+
+# Age descriptives #
+# ---------------------- #
+
+age_descriptives <- questionnaires_long %>%
+  group_by(group) %>%
+  summarise(mean_age = mean(age, na.rm = TRUE),
+            sd_age = sd(age, na.rm = TRUE),
+            median_age = median(age, na.rm = TRUE),
+            IQR_age = IQR(age, na.rm = TRUE)) %>%
+  ungroup()
+age_descriptives
+
+# Test difference #
+# ---------------------- #
+
+age_diff <- wilcox.test(
+  x = questionnaires_long %>% filter(group == 'CD', 
+                                     session == 1) %>% dplyr::pull(age),
+  y = questionnaires_long %>% filter(group == 'KD',
+                                     session == 1) %>% dplyr::pull(age),
+                        exact = FALSE)
+age_diff
+
+# - Assess BMI ---------------
+
+# BMI distributions #
+# ----------------------- #
+
+ggplot(questionnaires_long, aes(x = BMI, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group + session) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'BMI',
+       y = 'Density',
+       fill = 'Group',
+       title = 'BMI Distributions by Group and Session') +
+  theme_minimal()
+
+# BMI descriptives #
+# ---------------------- #
+
+BMI_descriptives <- questionnaires_long %>%
+  group_by(group, session) %>%
+  summarise(mean_BMI = mean(BMI, na.rm = TRUE),
+            sd_BMI = sd(BMI, na.rm = TRUE),
+            median_BMI = median(BMI, na.rm = TRUE),
+            IQR_BMI = IQR(BMI, na.rm = TRUE)) %>%
+  ungroup()
+BMI_descriptives
+
+# Testing differences #
+# =========================== #
+
+# Baseline #
+# ---------------- #
+
+# Yuen
+BMI_baseline_test <- yuen(BMI ~ group, 
+                          data = questionnaires_long %>% filter(session == 1),
+                          tr = 0.2
+                          )
+BMI_baseline_test
+
+# Regular ttest
+BMI_baseline_rtest <- t.test(BMI ~ group, 
+                          data = questionnaires_long %>% filter(session == 1))
+BMI_baseline_rtest
+
+# Interaction #
+# ---------------- #
+
+# 2x2 interaction (TRIMMED) 
+BMI_tranova <- WRS2::bwtrim(BMI ~ group * session,
+                            id = participant_id,
+                            data = questionnaires_long,
+                            tr = 0.2)
+BMI_tranova
+
+# 2x2 interaction (REGULAR)
+BMI_anova <- aov_4(BMI ~ group * session + (session | participant_id),
+                   data = questionnaires_long, 
+                   anova_table = list(es = 'pes'))
+BMI_anova
+
+# Visualise interaction
+afex_plot(
+  BMI_anova,
+  x = 'session',
+  trace = 'group',
+  error = 'within',
+  mapping = c('fill', 'colour'),
+  dodge = 0.30, 
+  point_arg = list(size = 3),
+  data_arg  = list(           
+    size = 2,
+    alpha = 0.6,
+    position = position_jitterdodge(
+      jitter.width = 0.2,     
+      jitter.height = 0,
+      dodge.width = 0.30  
+    )
+  )) +
+  scale_fill_manual(values  = pal, name = NULL) +
+  scale_colour_manual(values = pal, name = NULL) +
+  theme_minimal()
+
+# Visualise interaction 2
+questionnaires_long_afex <- questionnaires_long %>%
+  mutate(session_afex = factor(session, levels = c(1,2),
+                               labels = c('X1', 'X2')))
+
+BMI_afex <- afex_plot(
+  BMI_anova,
+  x = 'session',
+  trace = 'group',
+  error = 'within',
+  mapping = c('fill', 'colour'),
+  dodge = dodge_w_BMI,
+  data_plot = FALSE,
+  point_arg = list(size = 4)
+) +
+  # Participant trajectories
+  geom_line(
+    data = dplyr::filter(questionnaires_long_afex, group == 'KD'),
+    aes(session_afex, BMI, group = participant_id, colour = group, 
+        fill = NULL),
+    position = position_nudge(x = +dodge_w_BMI / 4),
+    alpha = 0.35, linewidth = 0.4
+  ) +
+  geom_line(
+    data = dplyr::filter(questionnaires_long_afex, group == 'CD'),
+    aes(session_afex, BMI, group = participant_id, colour = group,
+        fill = NULL),
+    position = position_nudge(x = -dodge_w_BMI / 4),
+    alpha = 0.35, linewidth = 0.4
+  ) +
+  # Raw points: dodge only by KD/CD; no jitter
+  geom_point(
+    data = questionnaires_long_afex,
+    aes(session_afex, BMI, colour = group, fill = group, group = group),
+    position = position_jitterdodge(
+      jitter.width = 0.06,
+      jitter.height = 0,
+      dodge.width = dodge_w_BMI,
+      seed = 1
+    ),
+    size = 2, alpha = 0.4
+  ) +
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  guides(colour = guide_legend(title = 'Group'),
+         fill = guide_legend(title = 'Group')) +
+  labs(x = 'Session') +
+  scale_x_discrete(labels = c('Pretest','Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'BMI_afex.pdf'),
+  plot = BMI_afex,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Robust plot #
+# ---------------- #
+
+# With trajectories
+# - Error bars: within-subject SE of trimmed mean
+gg_BMI_with <- ggplot(questionnaires_long,
+                       aes(x = session, y = BMI, fill = group, colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA, width = 0.5) +
+  geom_point(position = position_jitter(width = 0.03, height = 0),
+             alpha = 0.5, size = 1.8, shape = 21, stroke = 0.4) +
+  facet_wrap(~ group, 
+             labeller = labeller(group = c('CD' = 'Clean Diet', 
+                                           'KD' = 'Ketogenic Diet'))) +
+  geom_line(aes(group = participant_id),
+            alpha = 0.2, linewidth = 0.4) +
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point', shape = 18, size = 3.5, colour = 'black',
+               show.legend = FALSE) +
+  geom_errorbar(data = questionnaires_trwin %>% 
+                  filter(dv == 'BMI'),
+                aes(y = mean_tr, 
+                    ymin = mean_tr - se_tr_ws, 
+                    ymax = mean_tr + se_tr_ws,
+                    group = group),
+                colour = 'black',
+                width = 0.05) +
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal) +
+  labs(x = NULL, y = 'BMI', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     expand = expansion(mult = c(0.1, 0.1))) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'BMI_with.pdf'),
+  plot = gg_BMI_with,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Post-hoc tests #
+# ---------------- #
+
+BMI_emm <- emmeans(BMI_anova, ~ group * session)
+BMI_emm
+
+# Difference in differences
+BMI_did <- contrast(BMI_emm, interaction = c('pairwise', 'pairwise'))
+BMI_did
+
+# Declines in groups
+BMI_sess <- emmeans(BMI_anova, ~ session | group) %>%
+  contrast('pairwise')
+BMI_sess
+
+# Robust post-hoc tests #
+# ----------------------------- #
+
+# Create ordered list for analysis
+BMI_post_tr_list <- build_split_list(questionnaires_long, 
+                                      'BMI', c('group', 'session'))
+
+# Contrasts on trimmed means
+# - Gives warnings for some reason; reducing the no. of bootstrap samples
+# doesn't help
+BMI_post_tr <- bwmcp(2, 2, BMI_post_tr_list, tr=0.2,con=0, nboot=599)
+BMI_post_tr
+
+# Interaction contrast on trimmed difference scores
+# - Compute difference scores and then trim
+BMI_post_tr_int <- bwimcpES(2, 2, BMI_post_tr_list, tr=0.2, CI=TRUE, alpha=0.05)
+BMI_post_tr_int
+
+# Session changes KD
+BMI_session_KD <- yuend(questionnaires_long %>% 
+                           filter(group == 'KD', 
+                                  session == 1) %>%
+                           arrange(participant_id) %>%
+                          dplyr::pull(BMI),
+                         questionnaires_long %>% 
+                           filter(group == 'KD', 
+                                  session == 2) %>%
+                           arrange(participant_id) %>%
+                          dplyr::pull(BMI),
+                         tr = 0.2)
+BMI_session_KD
+
+# Session change CD
+BMI_session_CD <- yuend(questionnaires_long %>% 
+                           filter(group == 'CD', 
+                                  session == 1) %>%
+                           arrange(participant_id) %>%
+                          dplyr::pull(BMI),
+                         questionnaires_long %>% 
+                           filter(group == 'CD', 
+                                  session == 2) %>%
+                           arrange(participant_id) %>%
+                          dplyr::pull(BMI),
+                         tr = 0.2)
+BMI_session_CD
+
+# Effect size of session changes
+BMI_session_eff <- bw.es.B(2, 2, BMI_post_tr_list, 
+                            tr = 0.2, POOL = FALSE, OPT = FALSE, 
+                            CI = TRUE, SEED = TRUE, REL.MAG = NULL)
+BMI_session_eff
+
+# TASK-SWITCHING PREPARATION -----------------------------
+
+# Check current dataset
+glimpse(taskswitch_ready)
+
+# Filter data #
+# ----------------------- #
+
+# Select participants to be excluded due to too high an error rate
+taskswitch_exclude <- taskswitch_ready %>%
+  # Aggregate data
+  group_by(group, session, participant_id) %>%
+  summarise(error_rate = mean(error, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(error_rate >= 0.3)
+
+# Clean the RT trials
+taskswitch_crispy_rt <- taskswitch_ready %>%
+  filter(
+    # Exclude error trials
+    error == FALSE, 
+    # Filter out too fast and too slow trials
+    response_time > 300 & response_time < 3000,
+    # Filter out participants with too high an error rate
+    !(participant_id %in% taskswitch_exclude$participant_id)
+  ) %>%
+  mutate(log_rt = log(response_time))
+
+# Cleaning for ER analysis
+taskswitch_crispy_er <- taskswitch_ready %>%
+  filter(
+    # Filter out too fast and too slow trials
+    response_time > 300 & response_time < 3000,
+    # Filter out participants with too high an error rate
+    !(participant_id %in% taskswitch_exclude$participant_id)
+  ) %>%
+  mutate(log_rt = log(response_time))
+
+# Examine filtering results #
+# -------------------------------- #
+
+# Check number of participants after filtering
+taskswitch_participants <- taskswitch_crispy_rt %>%
+  group_by(group) %>%
+  summarise(count = n_distinct(participant_id)) %>%
+  ungroup()
+taskswitch_participants
+
+# Create a tibble crossing over task, task transitions, congruence and cue transitions
+# to get a better understanding of the data
+taskswitch_balance <- taskswitch_crispy_rt %>%
+  group_by(task_transition, congruence, cue_transition, task) %>%
+  summarise(count = n()) %>%
+  ungroup()
+print(taskswitch_balance, n = Inf)
+
+# Excluded RT trials because being too fast or too slow (RT analyses)
+task_switch_speed <- taskswitch_ready %>%
+  filter(error == FALSE,
+         !(participant_id %in% taskswitch_exclude$participant_id)) %>%
+  summarise(speed_off_prop = mean(response_time < 300 | response_time > 3000)) %>%
+  dplyr::pull(speed_off_prop)
+task_switch_speed
+
+# Excluded RT trials because being too fast or too slow (ACC analyses)
+task_switch_speed_acc <- taskswitch_ready %>%
+  filter(!(participant_id %in% taskswitch_exclude$participant_id)) %>%
+  summarise(speed_off_prop = mean(response_time < 300 | response_time > 3000)) %>%
+  dplyr::pull(speed_off_prop)
+task_switch_speed_acc
+
+# - ER tibbles ----------------------
+
+glimpse(taskswitch_crispy_er)
+
+# Tibble with trial proportions
+trial_proportions_er <- taskswitch_crispy_er %>%
+  group_by(group, participant_id, session) %>%
+  summarise(
+    prop_switch = mean(task_transition == 'switch'),
+    prop_incong = mean(congruence == 'incongruent'),
+    prop_cue_switch = mean(cue_transition == 'switch')
+  ) %>%
+  ungroup() %>%
+  # Centre
+  mutate(across(starts_with(('prop_')), ~ as.numeric(scale(.x, scale = FALSE))))
+glimpse(trial_proportions_er)
+
+# Tibble with errors for RT mixed-models (covariates)
+error_proportions <- taskswitch_crispy_er %>%
+  group_by(participant_id, group, session) %>%
+  summarise(
+    error_prop = mean(error == TRUE, na.rm = TRUE), .groups = 'drop') %>%
+  group_by(participant_id) %>%
+  mutate(
+    bs_error_prop = mean(error_prop, na.rm = TRUE),
+    ss_error_prop = error_prop - bs_error_prop) %>%
+  ungroup() %>%
+  dplyr::select(-error_prop) %>%
+  mutate(bs_error_prop = as.numeric(scale(bs_error_prop, scale = FALSE)))
+glimpse(error_proportions)
+
+# - RT tibbles ----------------------------
+
+glimpse(taskswitch_crispy_rt)
+
+# Tibble with trial proportions
+trial_proportions_rt <- taskswitch_crispy_rt %>%
+  group_by(group, participant_id, session) %>%
+  summarise(
+    prop_switch = mean(task_transition == 'switch'),
+    prop_incong = mean(congruence == 'incongruent'),
+    prop_cue_switch = mean(cue_transition == 'switch')
+  ) %>%
+  ungroup() %>%
+  # Centre
+  mutate(across(starts_with(('prop_')), ~ as.numeric(scale(.x, scale = FALSE))))
+glimpse(trial_proportions_rt)
+
+# Check distributions #
+# ------------------------------ #
+
+inspect_subject_dist(
+  taskswitch_crispy_rt %>% filter(session == 1),
+  n = 10,
+  pid_col = 'participant_id',
+  col_dist = 'log_rt',
+  group_col = 'group',
+  session_col = 'session',
+  wrap = c('session'),
+  pal = pal,
+  robust = 'MAD',
+  mad_mult = 2,
+  seed = NULL
+)
+
+# RT decomposition #
+# --------------------------- #
+
+# Trial- and session-level pieces
+rt_decomposed_ssws <- taskswitch_crispy_rt %>%
+  group_by(participant_id) %>%
+  mutate(bs_log_rt_tmp = mean(log_rt, na.rm = TRUE)) %>%  # Person mean over trials
+  group_by(participant_id, group, session) %>%
+  mutate(
+    m_is = mean(log_rt, na.rm = TRUE), # Session mean
+    m_is = ifelse(is.nan(m_is), NA_real_, m_is),
+    ws_log_rt = log_rt - m_is, # Trial deviation from session mean
+    ss_log_rt = m_is - bs_log_rt_tmp # Session mean minus person mean
+  ) %>%
+  ungroup() %>%
+  dplyr::select(-log_rt, -m_is, -bs_log_rt_tmp)
+glimpse(rt_decomposed_ssws)
+
+# Between-person (grand-mean centred; trial-weighted)
+rt_decomposed_bs <- taskswitch_crispy_rt %>%
+  group_by(participant_id) %>%
+  summarise(
+    bs_raw = mean(log_rt, na.rm = TRUE),
+    n_trials = sum(!is.na(log_rt)),
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    grand_log_rt = weighted.mean(bs_raw, w = n_trials, na.rm = TRUE),
+    bs_log_rt = bs_raw - grand_log_rt # Centred
+  ) %>%
+  dplyr::select(participant_id, bs_log_rt)
+glimpse(rt_decomposed_bs)
+
+# Final table
+rt_decomposed <- rt_decomposed_ssws %>%
+  left_join(rt_decomposed_bs, by = 'participant_id')
+glimpse(rt_decomposed)
+
+# - Data for mixed-effects ER ------------------------
+
+taskswitch_mixed_er <- taskswitch_crispy_er %>%
+  left_join(trial_proportions_er, by = c('participant_id', 'session', 'group')) %>%
+  left_join(rt_decomposed %>% dplyr::select(-c(response_time, error)),
+            by = c('participant_id', 'session', 'group', 'cohort', 'trial',
+                                  'date_startdate', 'block_count',
+                                  'trial_sequence', 'cue_color', 'task', 'congruence',
+                                  'digit', 'task_transition', 'digit_transition', 
+                                  'cue_transition')) %>%
+  mutate(response_correct = ifelse(error == FALSE, 1, 0),
+         response_incorrect = ifelse(error == TRUE, 1, 0))
+glimpse(taskswitch_mixed_er)
+
+# - Data for mixed-effects RT ----------------------
+
+# Tibble for mixed effects
+taskswitch_mixed_rt <- taskswitch_crispy_rt %>%
+  left_join(error_proportions, by = c('participant_id', 'session', 'group')) %>%
+  left_join(trial_proportions_rt, by = c('participant_id', 'session', 'group'))
+glimpse(taskswitch_mixed_rt)
+
+# ASRS ANALYSIS ---------------------
+
+glimpse(questionnaires_long)
+
+# - Visualise data -------------------
+
+# RAW VALUES #
+# ===================== #
+
+# Density
+ggplot(questionnaires_long, aes(x = ASRS, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group + session) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'ASRS',
+       y = 'Density',
+       fill = 'Group',
+       title = 'ASRS Distributions by Group and Session') +
+  theme_minimal()
+
+# With trajectories
+# - Error bars: within-subject SE of trimmed mean
+gg_ASRS_with <- ggplot(questionnaires_long,
+       aes(x = session, y = ASRS, fill = group, colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA, width = 0.5) +
+  geom_point(position = position_jitter(width = 0.03, height = 0),
+             alpha = 0.5, size = 1.8, shape = 21, stroke = 0.4) +
+  facet_wrap(~ group, 
+             labeller = labeller(group = c('CD' = 'Clean Diet', 
+                                                    'KD' = 'Ketogenic Diet'))) +
+  geom_line(aes(group = participant_id),
+            alpha = 0.2, linewidth = 0.4) +
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point', shape = 18, size = 3.5, colour = 'black',
+               show.legend = FALSE) +
+  geom_errorbar(data = questionnaires_trwin %>% 
+                  filter(dv == 'ASRS'),
+                aes(y = mean_tr, 
+                    ymin = mean_tr - se_tr_ws, 
+                    ymax = mean_tr + se_tr_ws,
+                    group = group),
+                colour = 'black',
+                width = 0.05) +
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal) +
+  labs(x = NULL, y = 'ASRS Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = c(0, 24)) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'ASRS_with.pdf'),
+  plot = gg_ASRS_with,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Without trajectories
+# - Error bars: between-subject SE of trimmed mean
+gg_ASRS_without <- ggplot(questionnaires_long,
+                        aes(x = session,
+                            y = ASRS,
+                            fill = group,
+                            colour = group)) +
+  geom_boxplot(
+    alpha = 0.6,
+    outlier.shape = NA,
+    width = 0.5,
+    position = position_dodge(width = dodge_w)
+  ) +
+  geom_point(
+    position = position_jitterdodge(
+      jitter.width = 0.15,
+      jitter.height = 0,
+      dodge.width = dodge_w,
+      seed = 1
+    ),
+    alpha = 0.5,
+    size = 1.8,
+    shape = 21,
+    stroke = 0.4
+  ) +
+  stat_summary(aes(group = group),
+               fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point',
+               shape = 18,
+               size = 3.5,
+               colour = 'black',
+               position = position_dodge(width = dodge_w),
+               show.legend = FALSE) + 
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  labs(x = 'Session', y = 'ASRS Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'ASRS_without.pdf'),
+  plot = gg_ASRS_without,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# ROBUSTIFICATION #
+# ===================== #
+
+# Plot
+pd <- position_dodge(width = 0.6) 
+gg_ASRS_trbar <- ggplot(questionnaires_trwin %>% filter(dv == 'ASRS'),
+       aes(x = session,
+           y = mean_tr,
+           fill = group,
+           colour = group,
+           group = group)) +
+  geom_col(position = pd, width = 0.6, colour = NA) + 
+  geom_errorbar(aes(ymin = mean_tr - se_tr_ws,
+                    ymax = mean_tr + se_tr_ws),
+                position = pd, width = 0.15, linewidth = 0.6) +
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  labs(x = 'Session',
+       y = 'Trimmed Mean ASRS Score',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     expand = expansion(mult = c(0, 0.1))) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'ASRS_trbar.pdf'),
+  plot = gg_ASRS_trbar,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# CHANGE SCORES #
+# ===================== #
+
+ASRS_wide <- questionnaires_ready %>%
+  dplyr::select(participant_id, group, cohort, age, 
+                ASRS_total_pre, ASRS_total_post) %>%
+  rename(ASRS_pre = ASRS_total_pre,
+         ASRS_post = ASRS_total_post) %>%
+  mutate(ASRS_change = ASRS_pre - ASRS_post)
+glimpse(ASRS_wide)
+
+# Density
+ggplot(ASRS_wide, aes(x = ASRS_change, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'ASRS Change Scores',
+       y = 'Density',
+       fill = 'Group',
+       title = 'ASRS Change Scores Distributions by Group') +
+  theme_minimal()
+
+# Boxplots
+gg_ASRS_change <- ggplot(ASRS_wide, aes(x = group,
+                      y = ASRS_change,
+                      fill = group,
+                      colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(
+    aes(fill = group, colour = group),
+    width = 0.05,         
+    height = 0,          
+    alpha = 0.6,
+    size = 2      
+  ) +
+  stat_summary(fun = function(z) mean(z, trim = 0.2, na.rm = TRUE), geom = 'point',
+            shape = 18, size = 3.5, colour = 'black', 
+            show.legend = FALSE) +
+  stat_summary(fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05) + 
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, guide = 'none') + 
+  labs(x = 'Group',
+       y = 'ASRS Change Score',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'ASRS_change.pdf'),
+  plot = gg_ASRS_change,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# - Trimmed mixed ANOVA -----------------------
+
+ASRS_tranova <- WRS2::bwtrim(ASRS ~ group * session, 
+                             id = participant_id, 
+                             data = questionnaires_long,
+                             tr = 0.2
+)
+ASRS_tranova
+
+# Baseline #
+# ------------------- #
+
+# Yuen's t-test
+ASRS_baseline_test <- yuen(ASRS ~ group, 
+                           data = questionnaires_long %>% filter(session == 1),
+                           tr = 0.2)
+ASRS_baseline_test
+
+# Bootstrapped Yuen
+ASRS_baseline_test_bt <- yuenbt(ASRS ~ group, 
+                                data = questionnaires_long %>% filter(session == 1),
+                                tr = 0.2,
+                                nboot = 100000,
+                                side = TRUE)
+ASRS_baseline_test_bt
+
+# Quantile comparison
+ASRS_quant_baseline <- WRS2::qcomhd(ASRS ~ group, 
+                                    data = questionnaires_long %>% 
+                                      filter(session == 1), 
+                                    q = c(0.1, 0.25, 0.5, 0.75, 0.9),
+                                    nboot = 50000, alpha = 0.05, ADJ.CI = TRUE)
+ASRS_quant_baseline
+
+# Post-hocs #
+# -------------------- #
+
+# Create ordered list for analysis
+ASRS_post_tr_list <- build_split_list(questionnaires_long, 
+                                      'ASRS', c('group', 'session'))
+
+# Contrasts on trimmed means
+# - Increasing nboot here can lead to NAs 
+# - Bootstrap-t method
+ASRS_post_tr <- WRS::bwmcp(2, 2, ASRS_post_tr_list, tr=0.2,con=0, nboot=1000)
+ASRS_post_tr
+
+# Interaction contrast on trimmed difference scores
+# - Compute difference scores and then trim
+# - No bootstrap
+ASRS_post_tr_int <- WRS::bwimcpES(2, 2, ASRS_post_tr_list, tr=0.2, 
+                                  CI=TRUE, alpha=0.05)
+ASRS_post_tr_int
+
+# Interaction contrast on trimmed difference scores with bootstrap
+# - Only for comparison with bwimcpES
+# - Compute difference scores and then trim
+# - Percentile bootstrap method
+ASRS_post_tr_int_boot <- WRS::spmcpi(2, 2, ASRS_post_tr_list,
+                                     est=tmean, alpha= 0.05, nboot=50000, 
+                                     SEED=TRUE,SR=FALSE,pr=TRUE)
+ASRS_post_tr_int_boot
+
+# NOTE:
+# - AKP: robust version of Cohen's D
+# - EP: explanatory measure of effect size
+# - QS (median): quantile shift of the median
+# - QStr: quantile shift of the trimmed mean
+# - WMW: probability p = P(Xi1 < Xi2)
+# - KMS: Kulinskaya and Staudte measure (not robust though)
+
+# Session changes KD
+ASRS_session_KD <- yuend(questionnaires_long %>% 
+                           filter(group == 'KD', 
+                                  session == 1) %>%
+                           arrange(participant_id) %>%
+                           dplyr::pull(ASRS),
+                         questionnaires_long %>% 
+                           filter(group == 'KD', 
+                                  session == 2) %>%
+                           arrange(participant_id) %>%
+                           dplyr::pull(ASRS),
+                         tr = 0.2)
+ASRS_session_KD
+
+# Session change CD
+ASRS_session_CD <- yuend(questionnaires_long %>% 
+                           filter(group == 'CD', 
+                                  session == 1) %>%
+                           arrange(participant_id) %>%
+                           dplyr::pull(ASRS),
+                         questionnaires_long %>% 
+                           filter(group == 'CD', 
+                                  session == 2) %>%
+                           arrange(participant_id) %>%
+                           dplyr::pull(ASRS),
+                         tr = 0.2)
+ASRS_session_CD
+
+# Effect size of session changes
+ASRS_session_eff <- bw.es.B(2, 2, ASRS_post_tr_list, 
+                            tr = 0.2, POOL = FALSE, OPT = FALSE, 
+                            CI = TRUE, SEED = TRUE, REL.MAG = NULL)
+ASRS_session_eff
+
+# Pooled effect size (session)
+ASRS_session_eff_pool <- bw.es.B(2, 2, ASRS_post_tr_list, 
+                                 tr = 0.2, POOL = TRUE, OPT = FALSE, 
+                                 CI = TRUE, SEED = TRUE, REL.MAG = NULL)
+ASRS_session_eff_pool
+
+# - Prepare data for balancing -------------------
+
+# NOTE: the following tibble contains only the questionnaire data 
+# and therefore all the participants who completed the questionnaires
+
+explore_tibble_quest <- questionnaires_long %>%
+  pivot_wider(
+    id_cols = c(participant_id, group, cohort, age),
+    names_from = session,
+    values_from = -c(participant_id, group, cohort, age, session),
+    names_glue = '{.value}_{session}'
+  )
+glimpse(explore_tibble_quest)
+
+# Centre covariates
+explore_tibble_quest_centred <- explore_tibble_quest %>%
+  mutate(across(ends_with('_1'), ~ as.numeric(scale(.x, scale = FALSE))))
+glimpse(explore_tibble_quest_centred)
+
+# - ASRS robust ANCOVA ---------------------
+
+# NOTE: After cardinality 'matching', the groups remain independent
+
+# Balance groups
+balanced_quest <- matchit(
+  group ~ ASRS_1,
+  data = explore_tibble_quest,
+  method = 'cardinality',
+  tols = .05,
+  std.tols = TRUE)
+summary(balanced_quest)
+
+# Quick balancing assessment
+bal.plot(balanced_quest, 
+         var.name = 'ASRS_1', 
+         which = 'both',
+         type = 'density',
+         colors = pal)
+
+# Extract the matched data
+balanced_ASRS <- match_data(balanced_quest) %>%
+  dplyr::select(participant_id, group, ASRS_1, ASRS_2)
+glimpse(balanced_ASRS)
+
+# TWO-STEP ROBUST ANCOVA #
+# ======================= #
+
+# Robust regression
+ASRS_reg <- MASS::rlm(ASRS_2 ~ ASRS_1, 
+                      data = balanced_ASRS,
+                      method = 'MM',
+                      psi = MASS::psi.bisquare)
+summary(ASRS_reg)
+
+# Extract and embed weighted residuals
+balanced_ASRS <- balanced_ASRS %>%
+  mutate(ASRS_2_res = ASRS_reg$residuals,
+         ASRS_2_res_log = log(ASRS_2_res + 10))
+
+# Plot the residuals
+plot(ASRS_reg$fitted.values, balanced_ASRS$ASRS_2_res)
+
+# Plot baseline by group #
+# ------------------------------ #
+
+# Boxplots
+gg_balanced_ASRS_baseline <- ggplot(balanced_ASRS,
+                                    aes(x = group,
+                                        y = ASRS_1,
+                                        fill = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(
+    aes(fill = group, colour = group),
+    width = 0.2,
+    height = 0,
+    alpha = 0.6
+  ) +
+  stat_summary(fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  stat_summary(fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point',
+               shape = 18,
+               size = 3.5,
+               colour = 'black',
+               position = position_dodge(width = dodge_w),
+               show.legend = FALSE) + 
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal, guide = 'none') + 
+  labs(x = 'Group',
+       y = 'ASRS Pretest',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot with optimal publication dimensions
+ggsave(
+  filename = file.path(plot_directory, 'balanced_ASRS_baseline.pdf'),
+  plot = gg_balanced_ASRS_baseline,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Plot the residuals by group #
+# ---------------------------------- #
+
+# Density
+ggplot(balanced_ASRS, 
+       aes(x = ASRS_2_res, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'ASRS Residuals',
+       y = 'Density',
+       fill = 'Group',
+       title = 'ASRS Residuals Distributions by Group') +
+  theme_minimal()
+
+# Boxplots
+gg_res_ASRS_posttest <- ggplot(balanced_ASRS,
+                               aes(x = group,
+                                   y = ASRS_2_res,
+                                   fill = group,
+                                   colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(
+    aes(fill = group, colour = group),
+    width = 0.2,
+    height = 0,
+    alpha = 0.6
+  ) +
+  stat_summary(fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  stat_summary(fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point',
+               shape = 18,
+               size = 3.5,
+               colour = 'black',
+               position = position_dodge(width = dodge_w)) + 
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal, guide = 'none') + 
+  labs(x = 'Group',
+       y = 'ASRS Posttest Residuals',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot with optimal publication dimensions
+ggsave(
+  filename = file.path(plot_directory, 'res_ASRS_posttest.pdf'),
+  plot = gg_res_ASRS_posttest,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Check baseline balance #
+# -------------------------- #
+
+cor.test(balanced_ASRS$ASRS_1, as.numeric(balanced_ASRS$group),
+         exact = FALSE, method = 'pearson')
+
+# Test the residuals #
+# -------------------------- #
+
+# Yuen's bootstrapped t-test
+ASRS_respost_yuenbt <- yuenbt(ASRS_2_res ~ group,
+                              data = balanced_ASRS,
+                              tr = 0.2,
+                              nboot = 100000,
+                              side = TRUE)
+ASRS_respost_yuenbt
+
+# Effect size 
+ASRS_respost_yuenbt_eff <- yuen.effect.ci(ASRS_2_res ~ group,
+                                          data = balanced_ASRS,
+                                          tr = 0.2,
+                                          nboot = 100000)
+ASRS_respost_yuenbt_eff
+
+# ASRS INATTENTION ---------------
+# - Visualise data -------------------
+
+# RAW VALUES #
+# ===================== #
+
+# Density
+ggplot(questionnaires_long, aes(x = ASRS_IA, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group + session) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'ASRS INATTENTION SCALE',
+       y = 'Density',
+       fill = 'Group',
+       title = 'ASRS INATTENTION SCALE Distributions by Group and Session') +
+  theme_minimal()
+
+# With trajectories
+# - Error bars: within-subject SE of trimmed mean
+gg_ASRS_IA_with <- ggplot(questionnaires_long,
+                       aes(x = session, y = ASRS_IA, fill = group, colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA, width = 0.5) +
+  geom_point(position = position_jitter(width = 0.03, height = 0),
+             alpha = 0.5, size = 1.8, shape = 21, stroke = 0.4) +
+  facet_wrap(~ group, 
+             labeller = labeller(group = c('CD' = 'Clean Diet', 
+                                           'KD' = 'Ketogenic Diet'))) +
+  geom_line(aes(group = participant_id),
+            alpha = 0.2, linewidth = 0.4) +
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point', shape = 18, size = 3.5, colour = 'black',
+               show.legend = FALSE) +
+  geom_errorbar(data = questionnaires_trwin %>% 
+                  filter(dv == 'ASRS_IA'),
+                aes(y = mean_tr, 
+                    ymin = mean_tr - se_tr_ws, 
+                    ymax = mean_tr + se_tr_ws,
+                    group = group),
+                colour = 'black',
+                width = 0.05) +
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal) +
+  labs(x = NULL, y = 'ASRS INATTENTION Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = c(0, 24)) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'ASRS_IA_with.pdf'),
+  plot = gg_ASRS_IA_with,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Without trajectories
+# - Error bars: between-subject SE of trimmed mean
+gg_ASRS_IA_without <- ggplot(questionnaires_long,
+                          aes(x = session,
+                              y = ASRS_IA,
+                              fill = group,
+                              colour = group)) +
+  geom_boxplot(
+    alpha = 0.6,
+    outlier.shape = NA,
+    width = 0.5,
+    position = position_dodge(width = dodge_w)
+  ) +
+  geom_point(
+    position = position_jitterdodge(
+      jitter.width = 0.15,
+      jitter.height = 0,
+      dodge.width = dodge_w,
+      seed = 1
+    ),
+    alpha = 0.5,
+    size = 1.8,
+    shape = 21,
+    stroke = 0.4
+  ) +
+  stat_summary(aes(group = group),
+               fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point',
+               shape = 18,
+               size = 3.5,
+               colour = 'black',
+               position = position_dodge(width = dodge_w),
+               show.legend = FALSE) + 
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  labs(x = 'Session', y = 'ASRS INATTENTION Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'ASRS_IA_without.pdf'),
+  plot = gg_ASRS_IA_without,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+
+
+# - Trimmed mixed ANOVA -----------------------
+
+ASRS_IA_tranova <- WRS2::bwtrim(ASRS_IA ~ group * session, 
+                             id = participant_id, 
+                             data = questionnaires_long,
+                             tr = 0.2
+                             )
+ASRS_IA_tranova
+
+# Baseline #
+# ------------------- #
+
+# Yuen's t-test
+ASRS_IA_baseline_test <- yuen(ASRS_IA ~ group, 
+                           data = questionnaires_long %>% filter(session == 1),
+                           tr = 0.2)
+ASRS_IA_baseline_test
+
+# Posttest #
+# ------------------- #
+
+# Yuen's t-test
+ASRS_IA_post_test <- yuen(ASRS_IA ~ group, 
+                              data = questionnaires_long %>% filter(session == 2),
+                              tr = 0.2)
+ASRS_IA_post_test
+
+# Post-hocs #
+# -------------------- #
+
+# Create ordered list for analysis
+ASRS_IA_post_tr_list <- build_split_list(questionnaires_long, 
+                                      'ASRS_IA', c('group', 'session'))
+
+# Contrasts on trimmed means
+# - Increasing nboot here can lead to NAs 
+# - Bootstrap-t method
+ASRS_IA_post_tr <- WRS::bwmcp(2, 2, ASRS_IA_post_tr_list, tr=0.2,con=0, nboot=1000)
+ASRS_IA_post_tr
+
+# Interaction contrast on trimmed difference scores
+# - Compute difference scores and then trim
+# - No bootstrap
+ASRS_IA_post_tr_int <- WRS::bwimcpES(2, 2, ASRS_IA_post_tr_list, tr=0.2, 
+                                  CI=TRUE, alpha=0.05)
+ASRS_IA_post_tr_int
+
+# NOTE:
+# - AKP: robust version of Cohen's D
+# - EP: explanatory measure of effect size
+# - QS (median): quantile shift of the median
+# - QStr: quantile shift of the trimmed mean
+# - WMW: probability p = P(Xi1 < Xi2)
+# - KMS: Kulinskaya and Staudte measure (not robust though)
+
+# Session changes KD
+ASRS_IA_session_KD <- yuend(questionnaires_long %>% 
+                           filter(group == 'KD', 
+                                  session == 1) %>%
+                           arrange(participant_id) %>%
+                           dplyr::pull(ASRS_IA),
+                         questionnaires_long %>% 
+                           filter(group == 'KD', 
+                                  session == 2) %>%
+                           arrange(participant_id) %>%
+                           dplyr::pull(ASRS_IA),
+                         tr = 0.2)
+ASRS_IA_session_KD
+
+# Session change CD
+ASRS_IA_session_CD <- yuend(questionnaires_long %>% 
+                           filter(group == 'CD', 
+                                  session == 1) %>%
+                           arrange(participant_id) %>%
+                           dplyr::pull(ASRS_IA),
+                         questionnaires_long %>% 
+                           filter(group == 'CD', 
+                                  session == 2) %>%
+                           arrange(participant_id) %>%
+                           dplyr::pull(ASRS_IA),
+                         tr = 0.2)
+ASRS_IA_session_CD
+
+# Effect size of session changes
+ASRS_IA_session_eff <- bw.es.B(2, 2, ASRS_IA_post_tr_list, 
+                           tr = 0.2, POOL = FALSE, OPT = FALSE, 
+                           CI = TRUE, SEED = TRUE, REL.MAG = NULL)
+ASRS_IA_session_eff
+
+# Pooled effect size (session)
+ASRS_IA_session_eff_pool <- bw.es.B(2, 2, ASRS_IA_post_tr_list, 
+                            tr = 0.2, POOL = TRUE, OPT = FALSE, 
+                            CI = TRUE, SEED = TRUE, REL.MAG = NULL)
+ASRS_IA_session_eff_pool
+
+# - ASRS robust ANCOVA ---------------------
+
+# NOTE: After cardinality 'matching', the groups remain independent
+
+# Balance groups
+balanced_quest_IA <- matchit(
+  group ~ ASRS_IA_1,
+  data = explore_tibble_quest,
+  method = 'cardinality',
+  tols = .05,
+  std.tols = TRUE)
+summary(balanced_quest_IA)
+
+# Quick balancing assessment
+bal.plot(balanced_quest_IA, 
+         var.name = 'ASRS_IA_1', 
+         which = 'both',
+         type = 'density',
+         colors = pal)
+
+# Extract the matched data
+balanced_ASRS_IA <- match_data(balanced_quest_IA) %>%
+  dplyr::select(participant_id, group, ASRS_IA_1, ASRS_IA_2)
+glimpse(balanced_ASRS_IA)
+
+# TWO-STEP ROBUST ANCOVA #
+# ======================= #
+
+# Robust regression
+ASRS_IA_reg <- MASS::rlm(ASRS_IA_2 ~ ASRS_IA_1, 
+                      data = balanced_ASRS_IA,
+                      method = 'MM',
+                      psi = MASS::psi.bisquare)
+summary(ASRS_IA_reg)
+
+# Extract and embed weighted residuals
+balanced_ASRS_IA <- balanced_ASRS_IA %>%
+  mutate(ASRS_IA_2_res = ASRS_IA_reg$residuals)
+
+# Plot the residuals
+plot(ASRS_IA_reg$fitted.values, balanced_ASRS_IA$ASRS_IA_2_res)
+
+# Plot baseline by group #
+# ------------------------------ #
+
+# Boxplots
+gg_balanced_ASRS_IA_baseline <- ggplot(balanced_ASRS_IA,
+                                    aes(x = group,
+                                        y = ASRS_IA_1,
+                                        fill = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(
+    aes(fill = group, colour = group),
+    width = 0.2,
+    height = 0,
+    alpha = 0.6
+  ) +
+  stat_summary(fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  stat_summary(fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point',
+               shape = 18,
+               size = 3.5,
+               colour = 'black',
+               position = position_dodge(width = dodge_w),
+               show.legend = FALSE) + 
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal, guide = 'none') + 
+  labs(x = 'Group',
+       y = 'ASRS Inattention Pretest',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot with optimal publication dimensions
+ggsave(
+  filename = file.path(plot_directory, 'balanced_ASRS_IA_baseline.pdf'),
+  plot = gg_balanced_ASRS_IA_baseline,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Plot the residuals by group #
+# ---------------------------------- #
+
+# Density
+ggplot(balanced_ASRS_IA, 
+       aes(x = ASRS_IA_2_res, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'ASRS Inattention Residuals',
+       y = 'Density',
+       fill = 'Group',
+       title = 'ASRS Inattention Residuals Distributions by Group') +
+  theme_minimal()
+
+# Boxplots
+gg_res_ASRS_IA_posttest <- ggplot(balanced_ASRS_IA,
+                               aes(x = group,
+                                   y = ASRS_IA_2_res,
+                                   fill = group,
+                                   colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(
+    aes(fill = group, colour = group),
+    width = 0.2,
+    height = 0,
+    alpha = 0.6
+  ) +
+  stat_summary(fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  stat_summary(fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point',
+               shape = 18,
+               size = 3.5,
+               colour = 'black',
+               position = position_dodge(width = dodge_w)) + 
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal, guide = 'none') + 
+  labs(x = 'Group',
+       y = 'ASRS Inattention Posttest Residuals',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot with optimal publication dimensions
+ggsave(
+  filename = file.path(plot_directory, 'res_ASRS_IA_posttest.pdf'),
+  plot = gg_res_ASRS_IA_posttest,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Check baseline balance #
+# -------------------------- #
+
+cor.test(balanced_ASRS_IA$ASRS_IA_1, as.numeric(balanced_ASRS_IA$group),
+         exact = FALSE, method = 'pearson')
+
+# Test the residuals #
+# -------------------------- #
+
+# Yuen's bootstrapped t-test
+ASRS_IA_respost_yuenbt <- yuenbt(ASRS_IA_2_res ~ group,
+                              data = balanced_ASRS_IA,
+                              tr = 0.2,
+                              nboot = 100000,
+                              side = TRUE)
+ASRS_IA_respost_yuenbt
+
+# Effect size 
+ASRS_IA_respost_yuenbt_eff <- yuen.effect.ci(ASRS_IA_2_res ~ group,
+                                          data = balanced_ASRS_IA,
+                                          tr = 0.2,
+                                          nboot = 100000)
+ASRS_IA_respost_yuenbt_eff
+
+# PSQI ANALYSIS -----------------
+# - Visualise data -------------------
+
+# RAW VALUES #
+# ===================== #
+
+# Density
+ggplot(questionnaires_long, aes(x = PSQI, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group + session) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'PSQI',
+       y = 'Density',
+       fill = 'Group',
+       title = 'PSQI Distributions by Group and Session') +
+  theme_minimal()
+
+# With trajectories
+# - Error bars: within-subject SE of trimmed mean
+gg_PSQI_with <- ggplot(questionnaires_long,
+       aes(x = session, y = PSQI, fill = group, colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA, width = 0.5) +
+  geom_point(position = position_jitter(width = 0.03, height = 0),
+             alpha = 0.5, size = 1.8, shape = 21, stroke = 0.4) +
+  facet_wrap(~ group, 
+             labeller = labeller(group = c('CD' = 'Clean Diet', 
+                                           'KD' = 'Ketogenic Diet'))) +
+  geom_line(aes(group = participant_id),
+            alpha = 0.2, linewidth = 0.4) +
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point', shape = 18, size = 3.5, colour = 'black',
+               show.legend = FALSE) +
+  geom_errorbar(data = questionnaires_trwin %>% 
+                  filter(dv == 'PSQI'),
+                aes(y = mean_tr, 
+                    ymin = mean_tr - se_tr_ws, 
+                    ymax = mean_tr + se_tr_ws,
+                    group = group),
+                colour = 'black',
+                width = 0.05) +
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  labs(x = NULL, y = 'PSQI Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     expand = expansion(mult = c(0, 0.1))) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'PSQI_with.pdf'),
+  plot = gg_PSQI_with,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Boxplots without trajectories
+# - Error bars: between-subject SE of trimmed mean
+gg_PSQI_without <- ggplot(questionnaires_long,
+       aes(x = session,
+           y = PSQI,
+           fill = group,
+           colour = group)) +
+  geom_boxplot(
+    alpha = 0.6,
+    outlier.shape = NA,
+    width = 0.5,
+    position = position_dodge(width = dodge_w)
+  ) +
+  geom_point(
+    position = position_jitterdodge(
+      jitter.width = 0.15,
+      jitter.height = 0,
+      dodge.width = dodge_w,
+      seed = 1
+    ),
+    alpha = 0.5,
+    size = 1.8,
+    shape = 21,
+    stroke = 0.4
+  ) +
+  stat_summary(aes(group = group),
+               fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point',
+               shape = 18,
+               size = 3.5,
+               colour = 'black',
+               position = position_dodge(width = dodge_w),
+               show.legend = FALSE) + 
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  labs(x = 'Session', y = 'PSQI Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     expand = expansion(mult = c(0, 0.1))) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'PSQI_without.pdf'),
+  plot = gg_PSQI_without,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# ROBUSTIFICATION #
+# ===================== #
+
+# Plot
+pd <- position_dodge(width = 0.6)
+gg_PSQI_trbar <- ggplot(questionnaires_trwin %>% filter(dv == 'PSQI'),
+       aes(x = session,
+           y = mean_tr,
+           fill = group,
+           colour = group,
+           group = group)) +
+  geom_col(position = pd, width = 0.6, colour = NA) + 
+  geom_errorbar(aes(ymin = mean_tr - se_tr,
+                    ymax = mean_tr + se_tr),
+                position = pd, width = 0.15, linewidth = 0.6) +
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  labs(x = 'Session',
+       y = 'Trimmed Mean PSQI Score',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     expand = expansion(mult = c(0, 0.1))) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'PSQI_trbar.pdf'),
+  plot = gg_PSQI_trbar,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# CHANGE SCORES #
+# ===================== #
+
+PSQI_wide <- questionnaires_ready %>%
+  dplyr::select(participant_id, group, cohort, age, PSQI_total_pre, PSQI_total_post) %>%
+  rename(PSQI_pre = PSQI_total_pre,
+         PSQI_post = PSQI_total_post) %>%
+  mutate(PSQI_change = PSQI_pre - PSQI_post)
+glimpse(PSQI_wide)
+
+# Density
+ggplot(PSQI_wide, aes(x = PSQI_change, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'PSQI Change Scores',
+       y = 'Density',
+       fill = 'Group',
+       title = 'PSQI Change Scores Distributions by Group') +
+  theme_minimal()
+
+# Boxplots
+gg_PSQI_change <- ggplot(PSQI_wide, aes(x = group,
+                      y = PSQI_change,
+                      fill = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(
+    aes(fill = group, colour = group),
+    width = 0.05,         
+    height = 0,          
+    alpha = 0.6,
+    size = 2      
+  ) +
+  stat_summary(fun = function(z) mean(z, trim = 0.2, na.rm = TRUE), geom = 'point',
+               shape = 18, size = 3.5, colour = 'black', 
+               show.legend = FALSE) +
+  stat_summary(fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05) + 
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal, guide = 'none') + 
+  labs(x = 'Group',
+       y = 'PSQI Change Score',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa() +
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'PSQI_change.pdf'),
+  plot = gg_PSQI_change,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# - Trimmed mixed ANOVA -----------------------
+
+PSQI_tranova <- WRS2::bwtrim(PSQI ~ group * session, 
+                             id = participant_id, 
+                             data = questionnaires_long,
+                             tr = 0.2
+)
+PSQI_tranova
+
+# Baseline #
+# ------------------- #
+
+PSQI_baseline_test <- yuen(PSQI ~ group, 
+                           data = questionnaires_long %>% filter(session == 1),
+                           tr = 0.2)
+PSQI_baseline_test
+
+# Post-hocs #
+# -------------------- #
+
+# Create ordered list for analysis
+PSQI_post_tr_list <- build_split_list(questionnaires_long, 
+                                      'PSQI', c('group', 'session'))
+
+# Contrasts on trimmed means
+PSQI_post_tr <- bwmcp(2, 2, PSQI_post_tr_list, tr=0.2,con=0, nboot=1000)
+PSQI_post_tr
+
+# Interaction contrast on trimmed difference scores
+# - Compute difference scores and then trim
+PSQI_post_tr_int <- bwimcpES(2, 2, PSQI_post_tr_list, tr=0.2, CI=TRUE, alpha=0.05)
+PSQI_post_tr_int
+
+# NOTE:
+# - AKP: robust version of Cohen's D
+# - EP: explanatory measure of effect size
+# - QS (median): quantile shift of the median
+# - QStr: quantile shift of the trimmed mean
+# - WMW: probability p = P(Xi1 < Xi2) (not robust when heteroscedasticity)
+# - KMS: Kulinskaya and Staudte measure (not robust though)
+
+# Main effect of Session #
+# ---------------------------- #
+
+# Effect size of the main effect of session
+PSQI_session_eff <- bw.es.B(2, 2, PSQI_post_tr_list, 
+                            tr = 0.2, POOL = TRUE, OPT = FALSE, 
+                            CI = TRUE, SEED = TRUE, REL.MAG = NULL)
+PSQI_session_eff
+
+# Main effect of Group #
+# ----------------------------- #
+
+# Effect size of the main effect of group (only separately for 
+# each time point)
+PSQI_group_eff <- bw.es.A(2, 2, PSQI_post_tr_list, tr = 0.2, 
+                          pr = TRUE, fun = ES.summary.CI)
+PSQI_group_eff
+
+# Pooled
+PSQI_group_eff_pool <- yuen.effect.ci(PSQI ~ group,
+                                      data = questionnaires_long,
+                                      tr = 0.2,
+                                      nboot = 1000)
+PSQI_group_eff_pool
+
+# BDI ANALYSIS -------------------------------------------------
+# - Visualise data ------------------
+
+# RAW VALUES #
+# ===================== #
+
+# Density
+ggplot(questionnaires_long, aes(x = BDI, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group + session) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'BDI',
+       y = 'Density',
+       fill = 'Group',
+       title = 'BDI Distributions by Group and Session') +
+  theme_minimal()
+
+# With trajectories
+# - Error bars: within-subject SE of trimmed mean
+gg_BDI_with <- ggplot(questionnaires_long,
+       aes(x = session, y = BDI, fill = group, colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA, width = 0.5) +
+  geom_point(position = position_jitter(width = 0.03, height = 0),
+             alpha = 0.5, size = 1.8, shape = 21, stroke = 0.4) +
+  facet_wrap(~ group, 
+             labeller = labeller(group = c('CD' = 'Clean Diet', 
+                                           'KD' = 'Ketogenic Diet'))) +
+  geom_line(aes(group = participant_id),
+            alpha = 0.2, linewidth = 0.4) +
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point', shape = 18, size = 3.5, colour = 'black',
+               show.legend = FALSE) +
+  geom_errorbar(data = questionnaires_trwin %>% 
+                  filter(dv == 'BDI'),
+                aes(y = mean_tr, 
+                    ymin = mean_tr - se_tr_ws, 
+                    ymax = mean_tr + se_tr_ws,
+                    group = group),
+                colour = 'black',
+                width = 0.05) +
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  labs(x = NULL, y = 'BDI Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     expand = expansion(mult = c(0, 0.1))) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'BDI_with.pdf'),
+  plot = gg_BDI_with,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Boxplots without trajectories
+gg_BDI_without <- ggplot(questionnaires_long,
+       aes(x = session,
+           y = BDI,
+           fill = group,
+           colour = group)) +
+  geom_boxplot(
+    alpha = 0.6,
+    outlier.shape = NA,
+    width = 0.5,
+    position = position_dodge(width = dodge_w)
+  ) +
+  geom_point(
+    position = position_jitterdodge(
+      jitter.width = 0.15,
+      jitter.height = 0,
+      dodge.width = dodge_w,
+      seed = 1
+    ),
+    alpha = 0.5,
+    size = 1.8,
+    shape = 21, 
+    stroke = 0.4
+  ) +
+  stat_summary(aes(group = group),
+               fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point',
+               shape = 18,
+               size = 3.5,
+               colour = 'black',
+               position = position_dodge(width = dodge_w),
+               show.legend = FALSE) + 
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  labs(x = 'Session', y = 'BDI Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     expand = expansion(mult = c(0, 0.1))) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'BDI_without.pdf'),
+  plot = gg_BDI_without,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# ROBUSTIFICATION #
+# ===================== #
+
+# Plot
+pd <- position_dodge(width = 0.6) 
+gg_BDI_trbar <- ggplot(questionnaires_trwin %>% filter(dv == 'BDI'),
+       aes(x = session,
+           y = mean_tr,
+           fill = group,
+           colour = group,
+           group = group)) +
+  geom_col(position = pd, width = 0.6, colour = NA) + 
+  geom_errorbar(aes(ymin = mean_tr - se_tr,
+                    ymax = mean_tr + se_tr),
+                position = pd, width = 0.15, linewidth = 0.6) +
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  labs(x = 'Session',
+       y = 'Trimmed Mean BDI Score',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     expand = expansion(mult = c(0, 0.1))) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'BDI_trbar.pdf'),
+  plot = gg_BDI_trbar,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# CHANGE SCORES #
+# ===================== #
+
+BDI_wide <- questionnaires_ready %>%
+  dplyr::select(participant_id, group, cohort, age, BDI_total_pre, BDI_total_post) %>%
+  rename(BDI_pre = BDI_total_pre,
+         BDI_post = BDI_total_post) %>%
+  mutate(BDI_change = BDI_pre - BDI_post)
+glimpse(BDI_wide)
+
+# Density
+ggplot(BDI_wide, aes(x = BDI_change, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'BDI Change Scores',
+       y = 'Density',
+       fill = 'Group',
+       title = 'BDI Change Scores Distributions by Group') +
+  theme_minimal()
+
+# Boxplots
+gg_BDI_change <- ggplot(BDI_wide, aes(x = group,
+                     y = BDI_change,
+                     fill = group,
+                     colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(
+    aes(fill = group, colour = group),
+    width = 0.05,         
+    height = 0,          
+    alpha = 0.6,
+    size = 2      
+  ) +
+  stat_summary(fun = function(z) mean(z, trim = 0.2, na.rm = TRUE), geom = 'point',
+               shape = 18, size = 3.5, colour = 'black',
+               show.legend = FALSE) +
+  stat_summary(fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05) + 
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal, guide = 'none') + 
+  labs(x = 'Group',
+       y = 'BDI Change Score',
+       fill = 'Group') +
+  scale_x_discrete(labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa() +
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'BDI_change.pdf'),
+  plot = gg_BDI_change,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# - Trimmed mixed ANOVA -----------------------
+
+BDI_tranova <- WRS2::bwtrim(BDI ~ group * session, 
+                             id = participant_id, 
+                             data = questionnaires_long,
+                             tr = 0.2
+)
+BDI_tranova
+
+# Baseline #
+# ------------------- #
+
+# Yuen's t-test
+BDI_baseline_test <- yuen(BDI ~ group, 
+                           data = questionnaires_long %>% filter(session == 1),
+                           tr = 0.2)
+BDI_baseline_test
+
+# Comparing quantiles
+BDI_quant_baseline <- WRS2::qcomhd(BDI ~ group, 
+                          data = questionnaires_long %>% 
+                            filter(session == 1), 
+                          q = c(0.1, 0.25, 0.5, 0.75, 0.9),
+                          nboot = 2000, alpha = 0.05, ADJ.CI = TRUE)
+BDI_quant_baseline
+
+# Compare variances
+BDI_perm <- permg(questionnaires_long %>% filter(session == 1,
+                                                  group == 'CD') %>% dplyr::pull(BDI),
+                   questionnaires_long %>% filter(session == 1, 
+                                                  group == 'KD') %>% dplyr::pull(BDI),
+                   alpha = 0.05, est = var, nboot = 10000)
+BDI_perm
+
+# Kolmogorov-Smirnov 
+BDI_ks_baseline <- ks.test(questionnaires_long %>% 
+                             filter(session == 1,
+                                    group == 'CD') %>% 
+                             dplyr::pull(BDI),
+                           questionnaires_long %>% 
+                             filter(session == 1,
+                                    group == 'KD') 
+                           %>% dplyr::pull(BDI),
+                           alternative = 'two.sided',
+                           simulate.p.value = TRUE,
+                           B = 10000)
+BDI_ks_baseline
+
+# Post-hocs #
+# -------------------- #
+
+# Create ordered list for analysis
+BDI_post_tr_list <- build_split_list(questionnaires_long, 
+                                      'BDI', c('group', 'session'))
+
+# Contrasts on trimmed means
+BDI_post_tr <- bwmcp(2, 2, BDI_post_tr_list, tr=0.2,con=0, nboot=1000)
+BDI_post_tr
+
+# Interaction contrast on trimmed difference scores
+# - Compute difference scores and then trim
+BDI_post_tr_int <- bwimcpES(2, 2, BDI_post_tr_list, tr=0.2, CI=TRUE, alpha=0.05)
+BDI_post_tr_int
+
+# NOTE:
+# - AKP: robust version of Cohen's D
+# - EP: explanatory measure of effect size
+# - QS (median): quantile shift of the median
+# - QStr: quantile shift of the trimmed mean
+# - WMW: probability p = P(Xi1 < Xi2)
+# - KMS: Kulinskaya and Staudte measure (not robust though)
+
+# Main effect of Session #
+# ---------------------------- #
+
+# Effect size of the main effect of session
+BDI_session_eff <- bw.es.B(2, 2, BDI_post_tr_list, 
+                            tr = 0.2, POOL = TRUE, OPT = FALSE, 
+                            CI = TRUE, SEED = TRUE, REL.MAG = NULL)
+BDI_session_eff
+
+# MEDIATION --------------------------
+
+# MEDIATION: Do ketone changes and / or BMI changes mediate the greater 
+# improvement in ASRS in the KD group? As ketones varied only in the KD
+# group, only this group was used for these analyses. 
+
+# - Prepare data -------------
+
+# Weighing ketones #
+# ------------------------ #
+
+# Define weights for ALL 8 time points (9–16)
+ketone_weights <- sqrt(c(1:7, 7))  # Repeat weight for time 16 = time 15
+
+# Normalize to sum to 1
+ketone_weights_norm <- ketone_weights / sum(ketone_weights)
+
+# Create weight lookup table
+ketone_weights_norm_tbl <- tibble(
+  measurement = 9:16,
+  weights_norm = ketone_weights_norm
+)
+
+# Compute weighted average
+ketones_weighed <- ketones_tibble %>%
+  dplyr::select(participant_id, group, cohort, ketones_pre, 
+                matches('^ketones_post_int_(9|1[0-6])$')) %>%
+  pivot_longer(cols = starts_with('ketones_post_int'),
+               names_to = 'measurement',
+               values_to = 'ketone_value',
+               names_pattern = '_(\\d+)$',
+               names_transform = list(measurement = as.integer)) %>%
+  left_join(ketone_weights_norm_tbl, by = 'measurement') %>%
+  mutate(ketones_post_norm = ketone_value * weights_norm) %>%
+  group_by(participant_id, group, cohort) %>%
+  summarise(
+    ketones_post = sum(ketones_post_norm, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  left_join(ketones_tibble %>% 
+              dplyr::select(-starts_with('ketones_post_int_')), 
+            by = c('participant_id', 'group', 'cohort'))
+glimpse(ketones_weighed)
+
+# Implement weighing #
+# ------------------------ #
+
+# Merge questionnaires with the ketones
+qt_ketones <- explore_tibble %>%
+  left_join(ketones_weighed, by = c('participant_id', 'group', 'cohort')) %>%
+  # Ketone mechanism only relevant for KD (stable for CD)
+  filter(group == 'KD') %>%
+  mutate(
+    ketones_change = ketones_post - ketones_pre,
+    BMI_change = BMI_1 - BMI_2,
+    ASRS_change = ASRS_1 - ASRS_2,
+    BDI_change = BDI_1 - BDI_2,
+    PSQI_change = PSQI_1 - PSQI_2,
+    across(c(ends_with('_change'), ends_with('_1'), 'ketones_pre'), 
+           ~ as.numeric(scale(.x, scale = FALSE))))
+glimpse(qt_ketones)
+
+qt_ketones_both <- explore_tibble %>%
+  left_join(ketones_weighed, by = c('participant_id', 'group', 'cohort')) %>%
+  mutate(
+    ketones_change = ketones_post - ketones_pre,
+    BMI_change = BMI_1 - BMI_2,
+    ASRS_change = ASRS_1 - ASRS_2,
+    BDI_change = BDI_1 - BDI_2,
+    PSQI_change = PSQI_1 - PSQI_2,
+    across(c(ends_with('_change'), ends_with('_1'), 'ketones_pre'), 
+           ~ as.numeric(scale(.x, scale = FALSE))))
+glimpse(qt_ketones_both)
+
+# Prepare tibble for change analysis #
+# -------------------------------------- #
+
+# Adjust tibble with task-switching 
+# and questionnaires for change analysis
+change_data <- explore_tibble %>%
+  mutate(
+    ASRS_change = ASRS_1 - ASRS_2,
+    BDI_change = BDI_1 - BDI_2,
+    PSQI_change = PSQI_1 - PSQI_2,
+    switch_cost_rt_change = switch_cost_rt_1 - switch_cost_rt_2,
+    incongruence_cost_rt_change = incongruence_cost_rt_1 - incongruence_cost_rt_2,
+    switch_cost_acc_change = switch_cost_acc_1 - switch_cost_acc_2,
+    incongruence_cost_acc_change = incongruence_cost_acc_1 - incongruence_cost_acc_2)
+glimpse(change_data)
+
+# - Visualise data ----------------
+
+# Visualise weighted ketones #
+# ================================ #
+
+weighted_ketones_plot <- ggplot(ketones_weighed %>% filter(group == 'KD'),
+                                aes(x = group, y = ketones_post, colour = group)) +
+  geom_jitter(size = 2.6, width = 0.2, alpha = 0.7) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  geom_hline(yintercept = 0.5, color = "black", 
+             linetype = "dashed", linewidth = 0.5) +
+  labs(x = NULL, y = 'WEIGHTED Intervention Ketones (mmol/L)') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'weighted_ketones.pdf'),
+  plot = weighted_ketones_plot,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Visualise ketones change #
+# ================================ #
+
+ketones_change_plot <- ggplot(qt_ketones %>% filter(group == 'KD'),
+                              aes(x = group, y = ketones_change, colour = group)) +
+  geom_jitter(size = 2.6, width = 0.2, alpha = 0.7) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  labs(x = NULL, y = 'Ketones Change (mmol/L) - Centred') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'ketones_change.pdf'),
+  plot = ketones_change_plot,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Visualise BMI change #
+# ================================ #
+
+BMI_change_plot <- ggplot(qt_ketones_both,
+                          aes(x = group, y = BMI_change, colour = group)) +
+  geom_jitter(size = 2.6, width = 0.2, alpha = 0.7) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  labs(x = NULL, y = 'BMI Change - Centred') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'BMI_change.pdf'),
+  plot = BMI_change_plot,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# - ASRS ---------------------
+
+# ROBUST REGRESSION APPROACH #
+# ================================== #
+
+# Model 1 #
+# ------------------ #
+
+# Define predictors matrix
+ASRS_keto_X <- model.matrix(~ ASRS_1 + ketones_change + ketones_pre, 
+                            data = qt_ketones)[ , -1]
+
+# Define regression model
+ASRS_keto <- WRS::tshdreg(ASRS_keto_X, qt_ketones$ASRS_2, xout=TRUE, 
+                          iter = 10000, outfun=outpro, corfun=pbcor, WARN = FALSE)
+ASRS_keto$coef
+ASRS_keto$Strength.Assoc
+ASRS_keto$Explanatory.Power
+
+# Omnibus test
+ASRS_keto_omni <- WRS::regtestMC(ASRS_keto_X, 
+                                 qt_ketones$ASRS_2, 
+                                 regfun = tshdreg, nboot = 599, alpha = 0.05, 
+                                 plotit = TRUE, xout = TRUE, outfun = outpro) 
+ASRS_keto_omni
+
+# Model 1b #
+# ------------------- #
+
+# Model matrix
+ASRS_keto_X1b <- model.matrix(~ ASRS_1, data = qt_ketones)[ , -1, drop = FALSE]
+
+# Define regression model
+ASRS_keto_1b <- WRS::tshdreg(ASRS_keto_X1b, qt_ketones$ASRS_2, xout=TRUE, 
+                             iter = 10000, outfun=outpro, corfun=pbcor, WARN = FALSE)
+ASRS_keto_1b$coef
+ASRS_keto_1b$Strength.Assoc
+ASRS_keto_1b$Explanatory.Power
+
+# Omnibus test
+ASRS_keto_1b_omni <- WRS::regtestMC(ASRS_keto_X1b, qt_ketones$ASRS_2, 
+                                    regfun = tshdreg, nboot = 599, alpha = 0.05, 
+                                    plotit = TRUE, xout = TRUE, outfun = outpro) 
+ASRS_keto_1b_omni
+
+# Model 2 #
+# ------------------- #
+
+# Define predictors matrix
+ASRS_keto_X2 <- model.matrix(~ ASRS_1 + ketones_change + 
+                               ketones_pre + BMI_change + BMI_1, 
+                             data = qt_ketones)[ , -1]
+
+# Define regression model
+ASRS_keto_2 <- WRS::tshdreg(ASRS_keto_X2, qt_ketones$ASRS_2, xout=TRUE, 
+                            iter = 10000, outfun=outpro, corfun=pbcor, WARN = FALSE)
+ASRS_keto_2$coef
+ASRS_keto_2$Strength.Assoc
+ASRS_keto_2$Explanatory.Power
+
+# Omnibus test
+ASRS_keto_2_omni <- WRS::regtestMC(ASRS_keto_X2, qt_ketones$ASRS_2, 
+                                   iter = 10000, regfun = tshdreg, nboot = 599, 
+                                   alpha = 0.05, plotit = TRUE, xout = TRUE, 
+                                   outfun = outpro, SEED = TRUE) 
+ASRS_keto_2_omni
+
+# Test coefficients
+ASRS_keto_2_coeffs <- regciMC_c(ASRS_keto_X2, qt_ketones$ASRS_2,
+                                regfun = WRS::tshdreg, nboot = 599, 
+                                iter = 100, alpha = 0.05, plotit = FALSE, pr = FALSE,
+                                null.val = NULL, method = 'hoch', 
+                                xlab = 'Predictor 1', ylab = 'Predictor 2', 
+                                xout = TRUE, outfun = WRS::outpro, SEED = TRUE)
+ASRS_keto_2_coeffs
+
+# Model 3 #
+# ------------------- #
+
+# Define predictors matrix
+ASRS_keto_X3 <- model.matrix(~ ASRS_1 + BMI_change + BMI_1,
+                             data = qt_ketones)[ , -1]
+
+# Define regression model
+ASRS_keto_3 <- WRS::tshdreg(ASRS_keto_X3, qt_ketones$ASRS_2, xout=TRUE, 
+                            outfun=outpro, corfun=pbcor, WARN = FALSE,
+                            iter = 10000)
+ASRS_keto_3$coef
+ASRS_keto_3$Strength.Assoc
+ASRS_keto_3$Explanatory.Power
+
+# Omnibus test
+ASRS_keto_3_omni <- WRS::regtestMC(ASRS_keto_X3, qt_ketones$ASRS_2, 
+                                   iter = 10000, regfun = tshdreg, nboot = 599, 
+                                   alpha = 0.05, plotit = TRUE, xout = TRUE, 
+                                   outfun = outpro, corfun = pbcor) 
+ASRS_keto_3_omni
+
+# Test coefficients
+ASRS_keto_3_coeffs <- regciMC_c(ASRS_keto_X3, qt_ketones$ASRS_2,
+                                regfun = WRS::tshdreg, nboot = 599, 
+                                iter = 100, alpha = 0.05, plotit = FALSE, pr = FALSE,
+                                null.val = NULL, method = 'hoch', 
+                                xlab = 'Predictor 1', ylab = 'Predictor 2', 
+                                xout = TRUE, outfun = WRS::outpro, SEED = TRUE)
+ASRS_keto_3_coeffs
+
+# PLOTS #
+# ===================== #
+
+# ASRS_2 ~ ketone changes #
+# ------------------------------ #
+
+# Control variables matrix
+ASRS_keto_X2_ctrl_ASRS <- ASRS_keto_X2[, c('ASRS_1', 'ketones_pre', 
+                                           'BMI_change', 'BMI_1'), drop = FALSE]
+
+# Coefficients of the control variables for ASRS_2
+fit_y_X2 <- WRS::tshdreg(ASRS_keto_X2_ctrl_ASRS, qt_ketones$ASRS_2,
+                         xout = TRUE, iter = 10000,
+                         outfun = outpro, corfun = pbcor, WARN = FALSE)
+
+# Remove the impact of the control variables from ASRS_2
+y_X2_res <- qt_ketones$ASRS_2 - as.numeric(cbind(1, ASRS_keto_X2_ctrl_ASRS) %*% fit_y_X2$coef)
+
+# Coefficients of the control variables for the mediator (ketones_change)
+fit_x_X2 <- WRS::tshdreg(ASRS_keto_X2_ctrl_ASRS, ASRS_keto_X2[, 'ketones_change'],
+                         xout = TRUE, iter = 10000,
+                         outfun = outpro, corfun = pbcor, WARN = FALSE)
+
+# Remove the impact of the control variables from the mediator (ketones_change)
+x_X2_res <- ASRS_keto_X2[, 'ketones_change'] - as.numeric(cbind(1, ASRS_keto_X2_ctrl_ASRS) %*% fit_x_X2$coef)
+
+# Plot
+ASRS_X2_slope <- ASRS_keto_2$coef[3]
+ASRS_X2_intercept <- ASRS_keto_2$coef[1]
+
+tibble(x_res = x_X2_res, y_res = y_X2_res) %>% 
+  ggplot(aes(x = x_res, y = y_res)) +
+  geom_point(alpha = 0.75, size = 2, colour = pal['KD']) +
+  geom_abline(intercept = 0, slope = ASRS_X2_slope,
+              colour = 'black', linewidth = 0.9) +
+  labs(x = 'Ketones change (residuals)',
+       y = 'ASRS-2 (residuals)',
+       title = 'ASRS Posttest as a Function of Ketone Changes') +
+  theme_minimal()
+
+# ASRS_2 ~ BMI changes #
+# ------------------------------ #
+
+ASRS_keto_X2_ctrl_BMI <- ASRS_keto_X2[, c('ASRS_1', 'ketones_pre', 
+                                          'ketones_change', 'BMI_1'), drop = FALSE]
+
+# Residualise ASRS_2 on the controls
+fit_y_X2_BMI <- WRS::tshdreg(ASRS_keto_X2_ctrl_BMI, qt_ketones$ASRS_2,
+                             xout = TRUE, iter = 10000,
+                             outfun = outpro, corfun = pbcor, WARN = FALSE)
+y_X2_res_BMI <- qt_ketones$ASRS_2 - as.numeric(cbind(1, ASRS_keto_X2_ctrl_BMI) %*% fit_y_X2_BMI$coef)
+
+# Residualise BMI_change on the controls
+fit_x_X2_BMI <- WRS::tshdreg(ASRS_keto_X2_ctrl_BMI, ASRS_keto_X2[, 'BMI_change'],
+                             xout = TRUE, iter = 10000,
+                             outfun = outpro, corfun = pbcor, WARN = FALSE)
+x_X2_res_BMI <- ASRS_keto_X2[, 'BMI_change'] - as.numeric(cbind(1, ASRS_keto_X2_ctrl_BMI) %*% fit_x_X2_BMI$coef)
+
+# Pull slope & intercept for BMI_change from the full model
+ASRS_X2_slope_BMI <- ASRS_keto_2$coef[5]
+ASRS_X2_intercept_BMI <- ASRS_keto_2$coef[1]
+
+# Plot
+tibble(x_res = x_X2_res_BMI, y_res = y_X2_res_BMI) %>% 
+  ggplot(aes(x = x_res, y = y_res)) +
+  geom_point(alpha = 0.75, size = 2, colour = pal['KD']) +
+  geom_abline(intercept = 0, slope = ASRS_X2_slope_BMI,
+              colour = 'black', linewidth = 0.9) +
+  labs(x = 'BMI change (residuals)',
+       y = 'ASRS-2 (residuals)',
+       title = 'ASRS Posttest as a Function of BMI Changes') +
+  theme_minimal()
+
+# P-VALUE ADJUSTMENT ------------------
+# - Effects trimmed ---------------
+
+lab_key <- c(
+  Qa = 'group',
+  Qb = 'session',
+  Qab = 'group:session'
+)
+
+# Collect bwtrims
+bwtrim_list <- list(
+  switch_rt = switch_rt_tranova,
+  incongr_rt = incongr_rt_tranova,
+  switch_acc = switch_acc_tranova,
+  incongr_acc = incongr_acc_tranova,
+  ASRS = ASRS_tranova,
+  PSQI = PSQI_tranova,
+  BDI = BDI_tranova
+)
+
+# GROUP ONLY #
+# ====================== #
+
+# Apply extraction function
+effects_trimmed_group <- imap(bwtrim_list, ~ {
+  df <- tidy_WRS2(.x,
+                  lab_key,
+                  p.adjust = FALSE)
+  df[['response']] <- .y 
+  df
+}) %>%
+  list_rbind() %>%
+  relocate(response) %>%
+  mutate(across(c(statistic, p.value), ~ round(.x, 3))) %>%
+  # Select only main effect of session
+  filter(term == 'group') %>%
+  # Adjust p-values
+  mutate(p.adj = p.adjust(p.value, 'BH'))
+effects_trimmed_group
+
+# SESSION ONLY #
+# ====================== #
+
+# Apply extraction function
+effects_trimmed_session <- imap(bwtrim_list, ~ {
+  df <- tidy_WRS2(.x,
+            lab_key,
+            p.adjust = FALSE)
+  df[['response']] <- .y 
+  df
+  }) %>%
+  list_rbind() %>%
+  relocate(response) %>%
+  mutate(across(c(statistic, p.value), ~ round(.x, 3))) %>%
+  # Select only main effect of session
+  filter(term == 'session') %>%
+  # Adjust p-values
+  mutate(p.adj = p.adjust(p.value, 'BH'))
+effects_trimmed_session
+
+# INT ONLY #
+# ======================== #
+
+# Apply extraction function
+effects_trimmed_int <- imap(bwtrim_list, ~ {
+  df <- tidy_WRS2(.x,
+                  lab_key,
+                  p.adjust = FALSE)
+  df[['response']] <- .y 
+  df
+}) %>%
+  list_rbind() %>%
+  relocate(response) %>%
+  filter(term == 'group:session') %>%
+  # Adjust p-values
+  mutate(p.adj = p.adjust(p.value, 'BH')) %>%
+  mutate(across(c(statistic, p.value, p.adj), ~ round(.x, 3)))
+print(effects_trimmed_int, n = Inf)
+
+# Trimmed change scores ASRS #
+# -------------------------------- #
+
+# Apply extraction function
+effects_trimmed_change <- imap(bwtrim_list, ~ {
+  df <- tidy_WRS2(.x,
+                  lab_key,
+                  p.adjust = FALSE)
+  df[['response']] <- .y 
+  df
+}) %>%
+  list_rbind() %>%
+  relocate(response) %>%
+  # Select only main effect of session
+  filter(term == 'group:session') %>%
+  # Case-specific adjustment 
+  mutate(
+    statistic = case_when(
+      response == 'ASRS' & term == 'group:session' ~ 2.251634,
+      .default = statistic
+    ),
+    df1 = case_when(
+      response == 'ASRS' & term == 'group:session' ~ NA_real_,
+      .default = df1
+    ),
+    df2 = case_when(
+      response == 'ASRS' & term == 'group:session' ~ NA_real_,
+      .default = df2
+    ),
+    p.value = case_when(
+      response == 'ASRS' & term == 'group:session' ~ 0.03314199,
+      .default = p.value
+    )
+  ) %>%
+  # Adjust p-values
+  mutate(p.adj = p.adjust(p.value, 'BH')) %>%
+  mutate(across(c(statistic, p.value, p.adj), ~ round(.x, 3)))
+effects_trimmed_change
