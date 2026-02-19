@@ -8,7 +8,7 @@
 
 # - task-switching re-analysis:
 # --- same model specification (also log-link function)
-# --- post-error exclusions
+# --- post-error exclusions (DONE)
 # --- task transition * cue transition interaction
 # --- possible task transition * congruence interaction
 
