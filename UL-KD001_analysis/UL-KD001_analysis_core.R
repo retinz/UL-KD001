@@ -6,9 +6,12 @@
 # TASKS #
 # ===================== #
 
-# - ASRS scales analysis
-# - task-switching re-analysis (same model specification, post-error exclusions,
-# task transition * cue transition interaction)
+# - task-switching re-analysis:
+# --- same model specification (also log-link function)
+# --- post-error exclusions
+# --- task transition * cue transition interaction
+# --- possible task transition * congruence interaction
+
 
 # LIBRARIES #
 # ===================== #
@@ -1586,6 +1589,149 @@ ASRS_IA_respost_yuenbt_eff <- yuen.effect.ci(ASRS_IA_2_res ~ group,
                                           nboot = 100000)
 ASRS_IA_respost_yuenbt_eff
 
+# ASRS HYPERACTIVITY ---------------
+# - Visualise data -------------------
+
+# RAW VALUES #
+# ===================== #
+
+# Density
+ggplot(questionnaires_long, aes(x = ASRS_H, colour = group, fill = group)) +
+  geom_density(alpha = 0.7, adjust = 1) +
+  facet_wrap(~ group + session) +
+  scale_colour_manual(values = pal) +
+  scale_fill_manual(values = pal) +
+  guides(colour = 'none') + 
+  labs(x = 'ASRS HYPERACTIVITY SCALE',
+       y = 'Density',
+       fill = 'Group',
+       title = 'ASRS HYPERACTIVITY SCALE Distributions by Group and Session') +
+  theme_minimal()
+
+# With trajectories
+# - Error bars: within-subject SE of trimmed mean
+gg_ASRS_H_with <- ggplot(questionnaires_long,
+                          aes(x = session, y = ASRS_H, fill = group, colour = group)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA, width = 0.5) +
+  geom_point(position = position_jitter(width = 0.03, height = 0),
+             alpha = 0.5, size = 1.8, shape = 21, stroke = 0.4) +
+  facet_wrap(~ group, 
+             labeller = labeller(group = c('CD' = 'Clean Diet', 
+                                           'KD' = 'Ketogenic Diet'))) +
+  geom_line(aes(group = participant_id),
+            alpha = 0.2, linewidth = 0.4) +
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point', shape = 18, size = 3.5, colour = 'black',
+               show.legend = FALSE) +
+  geom_errorbar(data = questionnaires_trwin %>% 
+                  filter(dv == 'ASRS_H'),
+                aes(y = mean_tr, 
+                    ymin = mean_tr - se_tr_ws, 
+                    ymax = mean_tr + se_tr_ws,
+                    group = group),
+                colour = 'black',
+                width = 0.05) +
+  scale_fill_manual(values = pal) +
+  scale_colour_manual(values = pal) +
+  labs(x = NULL, y = 'ASRS HYPERACTIVITY Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = c(0, 24)) +
+  theme_apa() + 
+  theme(legend.position = 'none')
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'ASRS_H_with.pdf'),
+  plot = gg_ASRS_H_with,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Without trajectories
+# - Error bars: between-subject SE of trimmed mean
+gg_ASRS_H_without <- ggplot(questionnaires_long,
+                             aes(x = session,
+                                 y = ASRS_H,
+                                 fill = group,
+                                 colour = group)) +
+  geom_boxplot(
+    alpha = 0.6,
+    outlier.shape = NA,
+    width = 0.5,
+    position = position_dodge(width = dodge_w)
+  ) +
+  geom_point(
+    position = position_jitterdodge(
+      jitter.width = 0.15,
+      jitter.height = 0,
+      dodge.width = dodge_w,
+      seed = 1
+    ),
+    alpha = 0.5,
+    size = 1.8,
+    shape = 21,
+    stroke = 0.4
+  ) +
+  stat_summary(aes(group = group),
+               fun.data = mean_se_tr,
+               fun.args = list(tr = 0.2),
+               geom = 'errorbar',
+               colour = 'black',
+               width = 0.05,
+               position = position_dodge(width = dodge_w)) + 
+  stat_summary(aes(group = group),
+               fun = function(z) mean(z, trim = 0.2, na.rm = TRUE),
+               geom = 'point',
+               shape = 18,
+               size = 3.5,
+               colour = 'black',
+               position = position_dodge(width = dodge_w),
+               show.legend = FALSE) + 
+  scale_fill_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  scale_colour_manual(values = pal, labels = c('Clean Diet', 'Ketogenic Diet')) +
+  labs(x = 'Session', y = 'ASRS HYPERACTIVITY Score', fill = 'Group', colour = 'Group') +
+  scale_x_discrete(labels = c('Pretest', 'Posttest')) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'ASRS_H_without.pdf'),
+  plot = gg_ASRS_H_without,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# - Trimmed mixed ANOVA -----------------------
+
+ASRS_H_tranova <- WRS2::bwtrim(ASRS_H ~ group * session, 
+                                id = participant_id, 
+                                data = questionnaires_long,
+                                tr = 0.2
+)
+ASRS_H_tranova
+
+
+# Post-hocs #
+# -------------------- #
+
+# Create ordered list for analysis
+ASRS_H_post_tr_list <- build_split_list(questionnaires_long, 
+                                         'ASRS_H', c('group', 'session'))
+
+# Pooled effect size (session)
+ASRS_H_session_eff_pool <- bw.es.B(2, 2, ASRS_H_post_tr_list, 
+                                    tr = 0.2, POOL = TRUE, OPT = FALSE, 
+                                    CI = TRUE, SEED = TRUE, REL.MAG = NULL)
+ASRS_H_session_eff_pool
+
 # PSQI ANALYSIS -----------------
 # - Visualise data -------------------
 
@@ -2219,7 +2365,13 @@ glimpse(ketones_weighed)
 # ------------------------ #
 
 # Merge questionnaires with the ketones
-qt_ketones <- explore_tibble %>%
+qt_ketones <- questionnaires_long %>%
+  pivot_wider(
+    id_cols = c(participant_id, group, cohort, age),
+    names_from = session,
+    values_from = -c(participant_id, group, cohort, age, session),
+    names_glue = '{.value}_{session}'
+  ) %>%
   left_join(ketones_weighed, by = c('participant_id', 'group', 'cohort')) %>%
   # Ketone mechanism only relevant for KD (stable for CD)
   filter(group == 'KD') %>%
@@ -2233,7 +2385,13 @@ qt_ketones <- explore_tibble %>%
            ~ as.numeric(scale(.x, scale = FALSE))))
 glimpse(qt_ketones)
 
-qt_ketones_both <- explore_tibble %>%
+qt_ketones_both <- questionnaires_long %>%
+  pivot_wider(
+    id_cols = c(participant_id, group, cohort, age),
+    names_from = session,
+    values_from = -c(participant_id, group, cohort, age, session),
+    names_glue = '{.value}_{session}'
+  ) %>%
   left_join(ketones_weighed, by = c('participant_id', 'group', 'cohort')) %>%
   mutate(
     ketones_change = ketones_post - ketones_pre,
@@ -2244,22 +2402,6 @@ qt_ketones_both <- explore_tibble %>%
     across(c(ends_with('_change'), ends_with('_1'), 'ketones_pre'), 
            ~ as.numeric(scale(.x, scale = FALSE))))
 glimpse(qt_ketones_both)
-
-# Prepare tibble for change analysis #
-# -------------------------------------- #
-
-# Adjust tibble with task-switching 
-# and questionnaires for change analysis
-change_data <- explore_tibble %>%
-  mutate(
-    ASRS_change = ASRS_1 - ASRS_2,
-    BDI_change = BDI_1 - BDI_2,
-    PSQI_change = PSQI_1 - PSQI_2,
-    switch_cost_rt_change = switch_cost_rt_1 - switch_cost_rt_2,
-    incongruence_cost_rt_change = incongruence_cost_rt_1 - incongruence_cost_rt_2,
-    switch_cost_acc_change = switch_cost_acc_1 - switch_cost_acc_2,
-    incongruence_cost_acc_change = incongruence_cost_acc_1 - incongruence_cost_acc_2)
-glimpse(change_data)
 
 # - Visualise data ----------------
 
@@ -2522,10 +2664,6 @@ lab_key <- c(
 
 # Collect bwtrims
 bwtrim_list <- list(
-  switch_rt = switch_rt_tranova,
-  incongr_rt = incongr_rt_tranova,
-  switch_acc = switch_acc_tranova,
-  incongr_acc = incongr_acc_tranova,
   ASRS = ASRS_tranova,
   PSQI = PSQI_tranova,
   BDI = BDI_tranova
