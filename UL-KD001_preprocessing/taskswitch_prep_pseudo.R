@@ -6,6 +6,7 @@
 # LIBRARIES #
 # ===================== #
 
+library(here)
 library(ggplot2)
 library(tidyverse)
 
@@ -85,19 +86,24 @@ print(check_trials_2, n = Inf)
 data_chopped <- data_filter %>%
   # No need to arrange by count_experimental_trial_sequence - already arranged
   group_by(participant_id, session, block_count) %>%
+  arrange(count_experimental_trial_sequence) %>%
   mutate(
     # Add trials 
     trial = row_number(),
     # Create transition columns
     task_transition = ifelse(task == lag(task), 'repeat', 'switch'),
     digit_transition = ifelse(digit == lag(digit), 'repeat', 'switch'),
-    cue_transition = ifelse(cue_color == lag(cue_color), 'repeat', 'switch')
+    cue_transition = ifelse(cue_color == lag(cue_color), 'repeat', 'switch'),
+    # Identify post-error trials
+    post_error = lag(error)
   ) %>%
   ungroup() %>%
   # Remove first trial from each block
   filter(!trial == 1,
-  # Remove repeating digit trials
-         !digit_transition == 'repeat') %>%
+         # Remove repeating digit trials
+         !digit_transition == 'repeat',
+         # Remove post-error trials
+         post_error == FALSE) %>%
   # Drop unnecessary columns 
   dplyr::select(-group_id) %>%
   rename(trial_sequence = count_experimental_trial_sequence)
@@ -112,6 +118,7 @@ participants_taskswitch
 
 # - Check trial exclusions -------------------
 
+# Digit repetitions
 digit_repetitions <- data_filter %>%
   group_by(participant_id, session, block_count) %>%
   mutate(
@@ -127,6 +134,27 @@ digit_repetitions <- data_filter %>%
   summarise(digit_rep = mean(digit_transition == 'repeat', na.rm = TRUE)) %>%
   dplyr::pull(digit_rep)
 digit_repetitions
+
+# Post error trials
+post_errors <- data_filter %>%
+  group_by(participant_id, session, block_count) %>%
+  arrange(count_experimental_trial_sequence) %>%
+  mutate(
+    # Identify post-error trials
+    post_error = lag(error),
+    # Add trials 
+    trial = row_number(),
+    # Create transition columns
+    task_transition = ifelse(task == lag(task), 'repeat', 'switch'),
+    digit_transition = ifelse(digit == lag(digit), 'repeat', 'switch'),
+    cue_transition = ifelse(cue_color == lag(cue_color), 'repeat', 'switch')
+  ) %>%
+  ungroup() %>%
+  # Remove first trial from each block
+  filter(!trial == 1) %>%
+  summarise(post_errors = mean(post_error == TRUE, na.rm = TRUE)) %>%
+  dplyr::pull(post_errors)
+post_errors
 
 # SAVE DATA -----------------------
 
