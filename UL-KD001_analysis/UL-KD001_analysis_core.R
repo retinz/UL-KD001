@@ -7,8 +7,8 @@
 # ===================== #
 
 # - task-switching re-analysis:
+# --- post-error marking (DONE) and exclusions (DONE)
 # --- same model specification (also log-link function)
-# --- post-error exclusions (DONE)
 # --- task transition * cue transition interaction
 # --- possible task transition * congruence interaction
 
@@ -489,9 +489,10 @@ taskswitch_crispy_rt <- taskswitch_ready %>%
     # Filter out too fast and too slow trials
     response_time > 300 & response_time < 3000,
     # Filter out participants with too high an error rate
-    !(participant_id %in% taskswitch_exclude$participant_id)
-  ) %>%
-  mutate(log_rt = log(response_time))
+    !(participant_id %in% taskswitch_exclude$participant_id),
+    # Exclude post error trials
+    post_error == FALSE
+  )
 
 # Cleaning for ER analysis
 taskswitch_crispy_er <- taskswitch_ready %>%
@@ -499,9 +500,11 @@ taskswitch_crispy_er <- taskswitch_ready %>%
     # Filter out too fast and too slow trials
     response_time > 300 & response_time < 3000,
     # Filter out participants with too high an error rate
-    !(participant_id %in% taskswitch_exclude$participant_id)
+    !(participant_id %in% taskswitch_exclude$participant_id),
+    # Exclude post error trials
+    post_error == FALSE
   ) %>%
-  mutate(log_rt = log(response_time))
+  mutate(response_correct = ifelse(error == FALSE, 1, 0))
 
 # Examine filtering results #
 # -------------------------------- #
@@ -512,14 +515,6 @@ taskswitch_participants <- taskswitch_crispy_rt %>%
   summarise(count = n_distinct(participant_id)) %>%
   ungroup()
 taskswitch_participants
-
-# Create a tibble crossing over task, task transitions, congruence and cue transitions
-# to get a better understanding of the data
-taskswitch_balance <- taskswitch_crispy_rt %>%
-  group_by(task_transition, congruence, cue_transition, task) %>%
-  summarise(count = n()) %>%
-  ungroup()
-print(taskswitch_balance, n = Inf)
 
 # Excluded RT trials because being too fast or too slow (RT analyses)
 task_switch_speed <- taskswitch_ready %>%
@@ -536,130 +531,20 @@ task_switch_speed_acc <- taskswitch_ready %>%
   dplyr::pull(speed_off_prop)
 task_switch_speed_acc
 
-# - ER tibbles ----------------------
+# TASK-SWITCHING RT ANALYSIS ---------------------
 
-glimpse(taskswitch_crispy_er)
+taskswitch_1_rt <- lme4::lmer(
+  response_time ~ group * session * task_transition * congruence + 
+    task_transition * cue_transition +
+    (task_transition * congruence | participant_id),
+  data = taskswitch_crispy_rt, REML = FALSE)
+summary(taskswitch_1_rt)
 
-# Tibble with trial proportions
-trial_proportions_er <- taskswitch_crispy_er %>%
-  group_by(group, participant_id, session) %>%
-  summarise(
-    prop_switch = mean(task_transition == 'switch'),
-    prop_incong = mean(congruence == 'incongruent'),
-    prop_cue_switch = mean(cue_transition == 'switch')
-  ) %>%
-  ungroup() %>%
-  # Centre
-  mutate(across(starts_with(('prop_')), ~ as.numeric(scale(.x, scale = FALSE))))
-glimpse(trial_proportions_er)
+# Diagnostics #
+# -------------------- #
 
-# Tibble with errors for RT mixed-models (covariates)
-error_proportions <- taskswitch_crispy_er %>%
-  group_by(participant_id, group, session) %>%
-  summarise(
-    error_prop = mean(error == TRUE, na.rm = TRUE), .groups = 'drop') %>%
-  group_by(participant_id) %>%
-  mutate(
-    bs_error_prop = mean(error_prop, na.rm = TRUE),
-    ss_error_prop = error_prop - bs_error_prop) %>%
-  ungroup() %>%
-  dplyr::select(-error_prop) %>%
-  mutate(bs_error_prop = as.numeric(scale(bs_error_prop, scale = FALSE)))
-glimpse(error_proportions)
-
-# - RT tibbles ----------------------------
-
-glimpse(taskswitch_crispy_rt)
-
-# Tibble with trial proportions
-trial_proportions_rt <- taskswitch_crispy_rt %>%
-  group_by(group, participant_id, session) %>%
-  summarise(
-    prop_switch = mean(task_transition == 'switch'),
-    prop_incong = mean(congruence == 'incongruent'),
-    prop_cue_switch = mean(cue_transition == 'switch')
-  ) %>%
-  ungroup() %>%
-  # Centre
-  mutate(across(starts_with(('prop_')), ~ as.numeric(scale(.x, scale = FALSE))))
-glimpse(trial_proportions_rt)
-
-# Check distributions #
-# ------------------------------ #
-
-inspect_subject_dist(
-  taskswitch_crispy_rt %>% filter(session == 1),
-  n = 10,
-  pid_col = 'participant_id',
-  col_dist = 'log_rt',
-  group_col = 'group',
-  session_col = 'session',
-  wrap = c('session'),
-  pal = pal,
-  robust = 'MAD',
-  mad_mult = 2,
-  seed = NULL
-)
-
-# RT decomposition #
-# --------------------------- #
-
-# Trial- and session-level pieces
-rt_decomposed_ssws <- taskswitch_crispy_rt %>%
-  group_by(participant_id) %>%
-  mutate(bs_log_rt_tmp = mean(log_rt, na.rm = TRUE)) %>%  # Person mean over trials
-  group_by(participant_id, group, session) %>%
-  mutate(
-    m_is = mean(log_rt, na.rm = TRUE), # Session mean
-    m_is = ifelse(is.nan(m_is), NA_real_, m_is),
-    ws_log_rt = log_rt - m_is, # Trial deviation from session mean
-    ss_log_rt = m_is - bs_log_rt_tmp # Session mean minus person mean
-  ) %>%
-  ungroup() %>%
-  dplyr::select(-log_rt, -m_is, -bs_log_rt_tmp)
-glimpse(rt_decomposed_ssws)
-
-# Between-person (grand-mean centred; trial-weighted)
-rt_decomposed_bs <- taskswitch_crispy_rt %>%
-  group_by(participant_id) %>%
-  summarise(
-    bs_raw = mean(log_rt, na.rm = TRUE),
-    n_trials = sum(!is.na(log_rt)),
-    .groups = 'drop'
-  ) %>%
-  mutate(
-    grand_log_rt = weighted.mean(bs_raw, w = n_trials, na.rm = TRUE),
-    bs_log_rt = bs_raw - grand_log_rt # Centred
-  ) %>%
-  dplyr::select(participant_id, bs_log_rt)
-glimpse(rt_decomposed_bs)
-
-# Final table
-rt_decomposed <- rt_decomposed_ssws %>%
-  left_join(rt_decomposed_bs, by = 'participant_id')
-glimpse(rt_decomposed)
-
-# - Data for mixed-effects ER ------------------------
-
-taskswitch_mixed_er <- taskswitch_crispy_er %>%
-  left_join(trial_proportions_er, by = c('participant_id', 'session', 'group')) %>%
-  left_join(rt_decomposed %>% dplyr::select(-c(response_time, error)),
-            by = c('participant_id', 'session', 'group', 'cohort', 'trial',
-                                  'date_startdate', 'block_count',
-                                  'trial_sequence', 'cue_color', 'task', 'congruence',
-                                  'digit', 'task_transition', 'digit_transition', 
-                                  'cue_transition')) %>%
-  mutate(response_correct = ifelse(error == FALSE, 1, 0),
-         response_incorrect = ifelse(error == TRUE, 1, 0))
-glimpse(taskswitch_mixed_er)
-
-# - Data for mixed-effects RT ----------------------
-
-# Tibble for mixed effects
-taskswitch_mixed_rt <- taskswitch_crispy_rt %>%
-  left_join(error_proportions, by = c('participant_id', 'session', 'group')) %>%
-  left_join(trial_proportions_rt, by = c('participant_id', 'session', 'group'))
-glimpse(taskswitch_mixed_rt)
+taskswitch_1_rt_diag <- diagnose_lmer(taskswitch_1_rt)
+print(taskswitch_1_rt_diag, show_plots = TRUE)
 
 # ASRS ANALYSIS ---------------------
 
