@@ -84,7 +84,6 @@ print(check_trials_2, n = Inf)
 # - Trial adjustments ---------------------------
 
 data_chopped <- data_filter %>%
-  # No need to arrange by count_experimental_trial_sequence - already arranged
   group_by(participant_id, session, block_count) %>%
   arrange(count_experimental_trial_sequence) %>%
   mutate(
