@@ -85,7 +85,7 @@ print(check_trials_2, n = Inf)
 
 data_chopped <- data_filter %>%
   group_by(participant_id, session, block_count) %>%
-  arrange(count_experimental_trial_sequence) %>%
+  arrange(count_experimental_trial_sequence, .by_group = TRUE) %>%
   mutate(
     # Add trials 
     trial = row_number(),
