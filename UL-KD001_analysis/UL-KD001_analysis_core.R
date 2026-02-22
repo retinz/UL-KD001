@@ -1,7 +1,8 @@
 # DESCRIPTION #
 # ===================== #
 
-# The core analysis of UL-KD001 data.
+# The core analysis of UL-KD001 data. This script contains the most relevant analyses 
+# for the study.
 
 # TASKS #
 # ===================== #
@@ -12,7 +13,10 @@
 # --- same model specification (also log-link function) (DONE)
 # --- task transition * cue transition interaction (DONE)
 # --- possible task transition * congruence interaction (DONE)
-# --- cross-validation
+# --- cross-validation (DONE)
+# --- posthocs + plotting (DONE)
+# --- RT and ACC baselines (DONE)
+# --- p-value adjustments
 
 # NOTES #
 # ===================== #
@@ -482,7 +486,7 @@ BMI_session_eff <- bw.es.B(2, 2, BMI_post_tr_list,
                             CI = TRUE, SEED = TRUE, REL.MAG = NULL)
 BMI_session_eff
 
-# TASK-SWITCHING PREPARATION -----------------------------
+# TASK SWITCHING PREPARATION -----------------------------
 
 # Check current dataset
 glimpse(taskswitch_ready)
@@ -594,7 +598,7 @@ task_switch_outliers_rt <- taskswitch_crispy_rt %>%
   dplyr::pull(outlier_prop)
 task_switch_outliers_rt
 
-# TASK-SWITCHING RT ANALYSIS -----------
+# TASK SWITCHING RT ANALYSIS -----------
 # - 4-way RE*+ ---------
 
 # Model
@@ -1154,7 +1158,7 @@ ggsave(
   units = 'in'
 )
 
-# TASK-SWITCHING ACC ANALYSIS ----------------
+# TASK SWITCHING ACC ANALYSIS ----------------
 # - 4-way RE*+ --------------
 
 # Model
@@ -1310,6 +1314,141 @@ ggsave(
   height = 4.5,
   units = 'in'
 )
+
+# - Incongruence cost ACC --------
+
+incongruence_2_er <- emmeans(taskswitch_2_er, 
+                             ~ group * session * congruence,
+                             type = 'response')
+incongruence_2_er
+
+# Tibble for plotting
+incongruence_tibble_2_er <- incongruence_2_er %>% 
+  as_tibble() %>%
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    congruence = factor(congruence, levels = c('congruent', 'incongruent'),
+                        labels = c('Congruent', 'Incongruent')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Within-subject SE plot #
+# ----------------------------- #
+
+# Within-subject SE plot
+data_acc_incongr_2_er <- afex_plot(
+  taskswitch_2_er,
+  x = 'session',
+  trace = 'congruence',      
+  panel = 'group',                
+  id = 'participant_id',
+  dv = 'response_correct',
+  data = taskswitch_er,
+  within_vars = c('congruence', 'session'),
+  between_vars = 'group',
+  error = 'within',
+  dodge = .15,
+  point_arg = list(size = 3),
+  line_arg  = list(linewidth = .8),
+  return = 'data'
+)
+
+# Adjust afex data output
+data_acc_incongr_2_er_adj <- data_acc_incongr_2_er$data %>%
+  mutate(
+    session = factor(
+      session,
+      levels = c(1,2),
+      labels = c('Pretest' , 'Posttest')),
+    congruence = factor(
+      congruence,
+      levels = c('congruent','incongruent'),
+      labels = c('Congruent', 'Incongruent')
+    ))
+
+# Afex means for SE
+afex_means_incongr_2_er <- data_acc_incongr_2_er$means %>%
+  as_tibble() %>%
+  # Select only what we need to join
+  dplyr::select(session, congruence, group, SE) %>%
+  # Ensure factors match the emmeans tibble exactly for the join
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    congruence = factor(congruence, levels = c('congruent', 'incongruent'), 
+                        labels = c('Congruent', 'Incongruent')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Join SEs into the main plotting data
+incongr_plot_data_2_er <- incongruence_tibble_2_er %>%
+  # Drop SE from the emmeans tibble
+  dplyr::select(-SE) %>%
+  left_join(afex_means_incongr_2_er, by = c('group', 'session', 'congruence'))
+
+# Plot
+pos_dodge <- position_dodge(width = dodge_tsmm)
+gg_mixed_incongr_acc <- ggplot(incongr_plot_data_2_er,
+                               aes(x = session, y = prob * 100,
+                                   colour = group,
+                                   linetype = congruence,
+                                   group = interaction(group, congruence))) +
+  geom_line(position = pos_dodge, linewidth = .8) +
+  geom_point(position = pos_dodge, size = 3) +
+  geom_errorbar(aes(ymin = prob * 100 - SE * 100,
+                    ymax = prob * 100 + SE * 100),
+                width = .1, position = pos_dodge) +
+  geom_jitter(
+    data = data_acc_incongr_2_er_adj,
+    aes(x = session, y = y * 100, colour = group,
+        group = interaction(group, congruence)),
+    position = position_jitterdodge(
+      jitter.width = 0.05, jitter.height = 0, dodge.width = dodge_tsmm
+    ),
+    alpha = 0.4, inherit.aes = FALSE, show.legend = FALSE
+  ) +
+  facet_wrap(~ group, 
+             labeller = labeller(group = c('CD' = 'Clean Diet', 
+                                           'KD' = 'Ketogenic Diet'))) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  scale_linetype_manual(values = c(Congruent = 'solid', Incongruent = 'dashed'),
+                        name = 'Trial Type') +
+  labs(x = NULL, y = 'Mean Accuracy (%)') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'mixed_incongr_acc_2_er.pdf'),
+  plot = gg_mixed_incongr_acc,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# TASK SWITCHING RT & ACC BASELINE --------------------------
+
+# RT #
+# ========= #
+
+# Grid
+taskswitch_emm_base_rt <- emmeans(taskswitch_1a7_rt, ~ group | session)
+taskswitch_emm_base_rt
+
+# Comparison
+taskswitch_base_rt <- contrast(taskswitch_emm_base_rt, 'pairwise')
+taskswitch_base_rt
+
+# ACC #
+# ========= #
+
+# Grid
+taskswitch_emm_base_er <- emmeans(taskswitch_2_er, ~ group | session)
+taskswitch_emm_base_er
+
+# Comparison
+taskswitch_base_er <- contrast(taskswitch_emm_base_er, 'pairwise')
+taskswitch_base_er
 
 # ASRS ANALYSIS ---------------------
 
@@ -3304,7 +3443,6 @@ tibble(x_res = x_X2_res_BMI, y_res = y_X2_res_BMI) %>%
   theme_minimal()
 
 # P-VALUE ADJUSTMENT ------------------
-# - Effects trimmed ---------------
 
 lab_key <- c(
   Qa = 'group',
@@ -3319,80 +3457,74 @@ bwtrim_list <- list(
   BDI = BDI_tranova
 )
 
-# GROUP ONLY #
-# ====================== #
+# Collect glmmTMB models
+glmm_list <- list(
+  ACC = taskswitch_2_er,
+  RT = taskswitch_1a7_rt
+)
 
-# Apply extraction function
-effects_trimmed_group <- imap(bwtrim_list, ~ {
+# Extract bwtrim results
+bwtrim_dfs <- imap(bwtrim_list, ~ {
   df <- tidy_WRS2(.x,
                   lab_key,
                   p.adjust = FALSE)
   df[['response']] <- .y 
   df
 }) %>%
+  list_rbind()
+
+# Extract glmmTMB results
+glmm_dfs <- imap(glmm_list, ~ {
+  df <- broom::tidy(car::Anova(.x, type = 'III'))
+  df[['response']] <- .y 
+  df
+}) %>%
   list_rbind() %>%
-  relocate(response) %>%
-  mutate(across(c(statistic, p.value), ~ round(.x, 3))) %>%
-  # Select only main effect of session
+  rename(df1 = df)
+
+# Combine all extracted results together
+combined_dfs <- bind_rows(bwtrim_dfs, glmm_dfs)
+
+# GROUP ONLY #
+# ====================== #
+
+effects_combined_group <- combined_dfs %>%
   filter(term == 'group') %>%
+  relocate(response) %>%
   # Adjust p-values
-  mutate(p.adj = p.adjust(p.value, 'BH'))
-effects_trimmed_group
+  mutate(p.adj = p.adjust(p.value, 'BH')) %>%
+  mutate(across(c(statistic, p.value, p.adj), ~ round(.x, 3)))
+effects_combined_group
 
 # SESSION ONLY #
 # ====================== #
 
-# Apply extraction function
-effects_trimmed_session <- imap(bwtrim_list, ~ {
-  df <- tidy_WRS2(.x,
-            lab_key,
-            p.adjust = FALSE)
-  df[['response']] <- .y 
-  df
-  }) %>%
-  list_rbind() %>%
-  relocate(response) %>%
-  mutate(across(c(statistic, p.value), ~ round(.x, 3))) %>%
-  # Select only main effect of session
+effects_combined_session <- combined_dfs %>%
   filter(term == 'session') %>%
+  relocate(response) %>%
   # Adjust p-values
-  mutate(p.adj = p.adjust(p.value, 'BH'))
-effects_trimmed_session
+  mutate(p.adj = p.adjust(p.value, 'BH')) %>%
+  mutate(across(c(statistic, p.value, p.adj), ~ round(.x, 3)))
+effects_combined_session
 
 # INT ONLY #
 # ======================== #
 
-# Apply extraction function
-effects_trimmed_int <- imap(bwtrim_list, ~ {
-  df <- tidy_WRS2(.x,
-                  lab_key,
-                  p.adjust = FALSE)
-  df[['response']] <- .y 
-  df
-}) %>%
-  list_rbind() %>%
+effects_combined_int <- combined_dfs %>%
+  filter(term %in% c('group:session', 'group:session:task_transition', 'group:session:congruence')) %>%
   relocate(response) %>%
-  filter(term == 'group:session') %>%
-  # Adjust p-values
+  # Adjust p-values across all models' interactions
   mutate(p.adj = p.adjust(p.value, 'BH')) %>%
   mutate(across(c(statistic, p.value, p.adj), ~ round(.x, 3)))
-print(effects_trimmed_int, n = Inf)
+print(effects_combined_int, n = Inf)
 
-# Trimmed change scores ASRS #
+# Sensitivity change scores ASRS #
 # -------------------------------- #
 
-# Apply extraction function
-effects_trimmed_change <- imap(bwtrim_list, ~ {
-  df <- tidy_WRS2(.x,
-                  lab_key,
-                  p.adjust = FALSE)
-  df[['response']] <- .y 
-  df
-}) %>%
-  list_rbind() %>%
+# Recreate the interaction table with the case-specific ASRS adjustment
+effects_combined_change <- combined_dfs %>%
+  filter(term %in% c('group:session', 'group:session:task_transition', 'group:session:congruence')) %>%
   relocate(response) %>%
-  # Select only main effect of session
-  filter(term == 'group:session') %>%
   # Case-specific adjustment 
   mutate(
     statistic = case_when(
@@ -3415,4 +3547,4 @@ effects_trimmed_change <- imap(bwtrim_list, ~ {
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH')) %>%
   mutate(across(c(statistic, p.value, p.adj), ~ round(.x, 3)))
-effects_trimmed_change
+print(effects_combined_change, n = Inf)
