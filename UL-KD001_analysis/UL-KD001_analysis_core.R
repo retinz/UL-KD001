@@ -9,9 +9,10 @@
 # - task-switching re-analysis:
 # --- post-error marking (DONE) and exclusions (DONE)
 # --- outlier exclusion at the trial level (DONE)
-# --- same model specification (also log-link function)
-# --- task transition * cue transition interaction
-# --- possible task transition * congruence interaction
+# --- same model specification (also log-link function) (DONE)
+# --- task transition * cue transition interaction (DONE)
+# --- possible task transition * congruence interaction (DONE)
+# --- cross-validation
 
 # NOTES #
 # ===================== #
@@ -21,7 +22,8 @@
 # - glmmTMB solves the convergence issue
 # - cue transition * task transition interaction rank deficient and automatically
 # dropped by lme4 and glmmTMB (tested also with treatment contrasts - doesn't help)
-# - taskswitch_1a7_rt the best model
+# - taskswitch_1a7_rt the best RT model
+# - taskswitch_2_er the best ACC model (cross-validated)
 
 # LIBRARIES #
 # ===================== #
@@ -77,6 +79,9 @@ if (!dir.exists(table_directory)) {
 
 # Data path
 data_path <- here('UL-KD001_data', 'LBI_clean')
+
+# Detect number of logical processors for parallel processing
+n_cores = max(1L, as.integer(floor(parallel::detectCores())))
 
 # LOAD DATA -------------------------
 
@@ -683,6 +688,18 @@ summary(taskswitch_1a7_rt)
 # Diagnostics
 diagnose_model(taskswitch_1a7_rt)
 
+# Cross-validation #
+# ----------------------- #
+
+# Cluster-based
+cv_taskswitch_1a7_rt <- cv(taskswitch_1a7_rt, 
+                         k = 5, 
+                         clusterVariables = 'participant_id', 
+                         ncores = n_cores,
+                         reps = 10)
+summary(cv_taskswitch_1a7_rt)
+plot(cv_taskswitch_1a7_rt)
+
 # - Autocorrelation check -------------
 
 # Get model residuals
@@ -882,7 +899,8 @@ car::Anova(taskswitch_1a7_rt, type = 'III')
 # - Switch cost RT 4-way RE*+ variance  -----------------------
 
 switch_1a7_rt <- emmeans(taskswitch_1a7_rt, 
-                                  ~ group * session * task_transition)
+                         ~ group * session * task_transition,
+                         type = 'response')
 switch_1a7_rt
 
 # Tibble for plotting
@@ -897,13 +915,13 @@ switch_tibble_1a7_rt <- switch_1a7_rt %>%
 
 # Post-hocs 3-way
 switch_3way_1a7_rt <- emmeans(taskswitch_1a7_rt,
-                                   ~ session * task_transition * group) %>%
+                              ~ session * task_transition * group) %>%
   contrast(interaction = c('pairwise', 'pairwise', 'pairwise'))
 switch_3way_1a7_rt
 
 # Post-hocs 2-way
 switch_2way_1a7_rt <- emmeans(taskswitch_1a7_rt,
-                                   ~ task_transition * session | group) %>%
+                              ~ task_transition * session | group) %>%
   contrast(interaction = c('pairwise', 'pairwise'))
 switch_2way_1a7_rt
 
@@ -912,20 +930,22 @@ switch_2way_1a7_rt_joint <- test(switch_2way_1a7_rt, by = NULL, joint = TRUE)
 switch_2way_1a7_rt_joint
 
 # Session given trial type
-switch_session_1a7_rt <- contrast(switch_1a7_rt, 'pairwise', 
-                                       by = c('group', 'task_transition'), 
-                                       combine = TRUE)
+switch_session_1a7_rt <- emmeans(taskswitch_1a7_rt, 
+                                 ~ group * session * task_transition) %>%
+  contrast('pairwise', by = c('group', 'task_transition'), 
+                                  combine = TRUE)
 switch_session_1a7_rt
 
 # Trial type given session
-switch_trial_1a7_rt <- contrast(switch_1a7_rt, 'pairwise', 
-                                     by = c('group', 'session'), 
-                                     combine = TRUE)
+switch_trial_1a7_rt <- emmeans(taskswitch_1a7_rt, 
+                               ~ group * session * task_transition) %>% 
+  contrast('pairwise', by = c('group', 'session'), 
+                                combine = TRUE)
 switch_trial_1a7_rt
 
 # Baseline comparison
 switch_baseline_rt <- emmeans(taskswitch_1a7_rt,
-                                   ~ group * task_transition | session) %>%
+                              ~ group * task_transition | session) %>%
   contrast(interaction = c('pairwise', 'pairwise'))
 switch_baseline_rt
 
@@ -984,14 +1004,14 @@ switch_plot_data_1a7_rt <- switch_tibble_1a7_rt %>%
 # Plot
 pos_dodge <- position_dodge(width = dodge_tsmm)
 gg_mixed_switch_rt <- ggplot(switch_plot_data_1a7_rt,
-                             aes(x = session, y = emmean,
+                             aes(x = session, y = response,
                                  colour = group,
                                  linetype = task_transition,
                                  group = interaction(group, task_transition))) +
   geom_line(position = pos_dodge, linewidth = .8) +
   geom_point(position = pos_dodge, size = 3) +
-  geom_errorbar(aes(ymin = emmean - SE,
-                    ymax = emmean + SE),
+  geom_errorbar(aes(ymin = response - SE,
+                    ymax = response + SE),
                 width = .1, position = pos_dodge) +
   geom_jitter(
     data = data_rt_switch_1a7_rt_adj,
@@ -1008,7 +1028,7 @@ gg_mixed_switch_rt <- ggplot(switch_plot_data_1a7_rt,
   scale_colour_manual(values = pal, guide = 'none') +
   scale_linetype_manual(values = c(Repeat = 'solid', Switch = 'dashed'),
                         name = 'Trial Type') +
-  labs(x = NULL, y = 'Reaction Time (log ms)') +
+  labs(x = NULL, y = 'Reaction Time (ms)') +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
                      limits = limits) +
   theme_apa()
@@ -1017,6 +1037,117 @@ gg_mixed_switch_rt <- ggplot(switch_plot_data_1a7_rt,
 ggsave(
   filename = file.path(plot_directory, 'mixed_switch_rt.pdf'),
   plot = gg_mixed_switch_rt,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# - Incongruence cost RT 4-way RE*+ variance  -----------------------
+
+incongr_1a7_rt <- emmeans(taskswitch_1a7_rt, 
+                          ~ group * session * congruence,
+                          type = 'response')
+incongr_1a7_rt
+
+# Tibble for plotting
+incongr_tibble_1a7_rt <- incongr_1a7_rt %>% 
+  as_tibble() %>%
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    congruence = factor(congruence, levels = c('congruent', 'incongruent'),
+                        labels = c('Congruent', 'Incongruent')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Within-subject SE plot
+# ----------------------------- #
+
+data_rt_incongr_1a7_rt <- afex_plot(
+  taskswitch_1a7_rt,
+  x = 'session',
+  trace = 'congruence',      
+  panel = 'group',                
+  id = 'participant_id',
+  dv = 'response_time',
+  data = taskswitch_rt_pred,
+  within_vars = c('congruence', 'session'),
+  between_vars = 'group',
+  error = 'within',
+  dodge = .15,
+  point_arg = list(size = 3),
+  line_arg  = list(linewidth = .8),
+  return = 'data'
+)
+
+# Adjust afex data output
+data_rt_incongr_1a7_rt_adj <- data_rt_incongr_1a7_rt$data %>%
+  mutate(
+    session = factor(
+      session,
+      levels = c(1,2),
+      labels = c('Pretest' , 'Posttest')),
+    congruence = factor(
+      congruence,
+      levels = c('congruent','incongruent'),
+      labels = c('Congruent', 'Incongruent')
+    ))
+
+# Afex means for SE
+afex_means_incongr_1a7_rt <- data_rt_incongr_1a7_rt$means %>%
+  as_tibble() %>%
+  # Select only what we need to join
+  dplyr::select(session, congruence, group, SE) %>%
+  # Ensure factors match the emmeans tibble exactly for the join
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    congruence = factor(congruence, levels = c('congruent', 'incongruent'), 
+                        labels = c('Congruent', 'Incongruent')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Join SEs into the main plotting data
+incongr_plot_data_1a7_rt <- incongr_tibble_1a7_rt %>%
+  # Drop SE from the emmeans tibble
+  dplyr::select(-SE) %>%
+  left_join(afex_means_incongr_1a7_rt, by = c('group', 'session', 'congruence'))
+
+# Plot
+pos_dodge <- position_dodge(width = dodge_tsmm)
+gg_mixed_incongr_rt <- ggplot(incongr_plot_data_1a7_rt,
+                              aes(x = session, y = response,
+                                  colour = group,
+                                  linetype = congruence,
+                                  group = interaction(group, congruence))) +
+  geom_line(position = pos_dodge, linewidth = .8) +
+  geom_point(position = pos_dodge, size = 3) +
+  geom_errorbar(aes(ymin = response - SE,
+                    ymax = response + SE),
+                width = .1, position = pos_dodge) +
+  geom_jitter(
+    data = data_rt_incongr_1a7_rt_adj,
+    aes(x = session, y = y, colour = group,
+        group = interaction(group, congruence)),
+    position = position_jitterdodge(
+      jitter.width = 0.05, jitter.height = 0, dodge.width = dodge_tsmm
+    ),
+    alpha = 0.4, inherit.aes = FALSE, show.legend = FALSE
+  ) +
+  facet_wrap(~ group, 
+             labeller = labeller(group = c('CD' = 'Clean Diet', 
+                                           'KD' = 'Ketogenic Diet'))) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  scale_linetype_manual(values = c(Congruent = 'solid', Incongruent = 'dashed'),
+                        name = 'Trial Type') +
+  labs(x = NULL, y = 'Reaction Time (ms)') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
+                     limits = limits) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'mixed_incongr_rt.pdf'),
+  plot = gg_mixed_incongr_rt,
   device = cairo_pdf,
   width = 6.5, 
   height = 4.5,
@@ -1036,6 +1167,149 @@ taskswitch_1_er <- glmmTMB::glmmTMB(
   data = taskswitch_er, family = binomial(),
   control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)))
 summary(taskswitch_1_er)
+
+# - 4-way RE*+|| --------------
+
+# Model
+taskswitch_2_er <- glmmTMB::glmmTMB(
+  response_correct ~ 
+    group * session * task_transition * congruence + 
+    cue_transition +
+    (task_transition * congruence + cue_transition || participant_id),
+  data = taskswitch_er, family = binomial(),
+  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)))
+summary(taskswitch_2_er)
+
+# Diagnostics
+diagnose_model(taskswitch_2_er)
+
+# Cross-validation #
+# ----------------------- #
+
+# Cluster-based
+cv_taskswitch_2_er <- cv(taskswitch_2_er, 
+                             k = 5, 
+                             clusterVariables = 'participant_id', 
+                             ncores = n_cores,
+                             reps = 10)
+summary(cv_taskswitch_2_er)
+plot(cv_taskswitch_2_er)
+
+# MIXED-EFFECTS FOLLOW-UPS: ACC ---------
+
+# Anova table
+car::Anova(taskswitch_2_er, type = 'III')
+
+# - Switch cost ACC --------
+
+switch_2_er <- emmeans(taskswitch_2_er, 
+                       ~ group * session * task_transition,
+                       type = 'response')
+switch_2_er
+
+# Tibble for plotting
+switch_tibble_2_er <- switch_2_er %>% 
+  as_tibble() %>%
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    task_transition = factor(task_transition, levels = c('repeat', 'switch'),
+                             labels = c('Repeat', 'Switch')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Within-subject SE plot #
+# ----------------------------- #
+
+# Within-subject SE plot
+data_acc_switch_2_er <- afex_plot(
+  taskswitch_2_er,
+  x = 'session',
+  trace = 'task_transition',      
+  panel = 'group',                
+  id = 'participant_id',
+  dv = 'response_correct',
+  data = taskswitch_er,
+  within_vars = c('task_transition', 'session'),
+  between_vars = 'group',
+  error = 'within',
+  dodge = .15,
+  point_arg = list(size = 3),
+  line_arg  = list(linewidth = .8),
+  return = 'data'
+)
+
+# Adjust afex data output
+data_acc_switch_2_er_adj <- data_acc_switch_2_er$data %>%
+  mutate(
+    session = factor(
+      session,
+      levels = c(1,2),
+      labels = c('Pretest' , 'Posttest')),
+    task_transition = factor(
+      task_transition,
+      levels = c('repeat','switch'),
+      labels = c('Repeat', 'Switch')
+    ))
+
+# Afex means for SE
+afex_means_switch_2_er <- data_acc_switch_2_er$means %>%
+  as_tibble() %>%
+  # Select only what we need to join
+  dplyr::select(session, task_transition, group, SE) %>%
+  # Ensure factors match the emmeans tibble exactly for the join
+  mutate(
+    session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
+    task_transition = factor(task_transition, levels = c('repeat', 'switch'), 
+                             labels = c('Repeat', 'Switch')),
+    group = factor(group, levels = c('CD', 'KD'))
+  )
+
+# Join SEs into the main plotting data
+switch_plot_data_2_er <- switch_tibble_2_er %>%
+  # Drop SE from the emmeans tibble
+  dplyr::select(-SE) %>%
+  left_join(afex_means_switch_2_er, by = c('group', 'session', 'task_transition'))
+
+# Plot
+pos_dodge <- position_dodge(width = dodge_tsmm)
+gg_mixed_switch_acc <- ggplot(switch_plot_data_2_er,
+                              aes(x = session, y = prob * 100,
+                                  colour = group,
+                                  linetype = task_transition,
+                                  group = interaction(group, task_transition))) +
+  geom_line(position = pos_dodge, linewidth = .8) +
+  geom_point(position = pos_dodge, size = 3) +
+  geom_errorbar(aes(ymin = prob * 100 - SE * 100,
+                    ymax = prob * 100 + SE * 100),
+                width = .1, position = pos_dodge) +
+  geom_jitter(
+    data = data_acc_switch_2_er_adj,
+    aes(x = session, y = y * 100, colour = group,
+        group = interaction(group, task_transition)),
+    position = position_jitterdodge(
+      jitter.width = 0.05, jitter.height = 0, dodge.width = dodge_tsmm
+    ),
+    alpha = 0.4, inherit.aes = FALSE, show.legend = FALSE
+  ) +
+  facet_wrap(~ group, 
+             labeller = labeller(group = c('CD' = 'Clean Diet', 
+                                           'KD' = 'Ketogenic Diet'))) +
+  scale_colour_manual(values = pal, guide = 'none') +
+  scale_linetype_manual(values = c(Repeat = 'solid', Switch = 'dashed'),
+                        name = 'Trial Type') +
+  labs(x = NULL, y = 'Mean Accuracy (%)') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  theme_apa()
+
+# Save plot
+ggsave(
+  filename = file.path(plot_directory, 'mixed_switch_acc_2_er.pdf'),
+  plot = gg_mixed_switch_acc,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
 
 # ASRS ANALYSIS ---------------------
 
