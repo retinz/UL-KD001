@@ -602,7 +602,7 @@ task_switch_outliers_rt
 # - 4-way RE*+ ---------
 
 # Model
-# - Doesn't converge
+# - doesn't converge
 taskswitch_1_rt <- lme4::glmer(
   response_time ~ group * session * task_transition * congruence + 
     task_transition * cue_transition +
@@ -611,6 +611,7 @@ taskswitch_1_rt <- lme4::glmer(
 summary(taskswitch_1_rt)
 
 # Different package
+# - rank deficient
 taskswitch_1a1_rt <- glmmTMB::glmmTMB(
   response_time ~ group * session * task_transition * congruence + 
     task_transition * cue_transition +
@@ -618,7 +619,8 @@ taskswitch_1a1_rt <- glmmTMB::glmmTMB(
   data = taskswitch_rt, family = gaussian(link = 'log'))
 summary(taskswitch_1a1_rt)
 
-# Different package - no deficient ranks
+# Different package
+# - no deficient ranks
 taskswitch_1a2_rt <- glmmTMB::glmmTMB(
   response_time ~ group * session * task_transition * congruence
   + cue_transition +
@@ -626,8 +628,9 @@ taskswitch_1a2_rt <- glmmTMB::glmmTMB(
   data = taskswitch_rt, family = gaussian(link = 'log'))
 summary(taskswitch_1a2_rt)
 
-# Different package - gamma family
-# - Doesn't converge
+# Different package
+# - gamma family
+# - doesn't converge
 taskswitch_1a3_rt <- glmmTMB::glmmTMB(
   response_time ~ group * session * task_transition * congruence
   + cue_transition +
@@ -788,7 +791,7 @@ diagnose_model(taskswitch_1a8_rt)
 # Model
 # - Doesn't converge
 taskswitch_1b_rt <- lme4::glmer(
-  response_time ~ group * session * task_transition * congruence + 
+  response_time ~ group * session * task_transition * congruence 
     + cue_transition +
     (task_transition + congruence + cue_transition | participant_id),
   data = taskswitch_rt, family = gaussian(link = 'log'))
@@ -796,7 +799,7 @@ summary(taskswitch_1b_rt)
 
 # Different package
 taskswitch_1b1_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * task_transition * congruence + 
+  response_time ~ group * session * task_transition * congruence 
     + cue_transition +
     (task_transition + congruence + cue_transition | participant_id),
   data = taskswitch_rt, family = gaussian(link = 'log'))
@@ -806,7 +809,7 @@ summary(taskswitch_1b1_rt)
 
 # Model
 taskswitch_1c_rt <- lme4::glmer(
-  response_time ~ group * session * task_transition * congruence + 
+  response_time ~ group * session * task_transition * congruence
     + cue_transition +
     (task_transition + congruence + cue_transition || participant_id),
   data = taskswitch_rt, family = gaussian(link = 'log'))
@@ -814,7 +817,7 @@ summary(taskswitch_1c_rt)
 
 # Different package
 taskswitch_1c1_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * task_transition * congruence + 
+  response_time ~ group * session * task_transition * congruence 
     + cue_transition +
     (task_transition + congruence + cue_transition || participant_id),
   data = taskswitch_rt, family = gaussian(link = 'log'))
@@ -823,7 +826,7 @@ summary(taskswitch_1c1_rt)
 # - 3-way RE*+ --------
 
 # Model
-# - Doesn't converge
+# - doesn't converge
 taskswitch_2_rt <- lme4::glmer(
   response_time ~ group * session * (task_transition + congruence) + 
     task_transition * congruence + cue_transition +
@@ -842,7 +845,7 @@ summary(taskswitch_2a1_rt)
 # - 3-way RE** --------
 
 # Different package
-# - Doesn't converge
+# - doesn't converge
 taskswitch_2a2_rt <- glmmTMB::glmmTMB(
   response_time ~ group * session * (task_transition + congruence) + 
     task_transition * congruence + cue_transition +
@@ -3489,7 +3492,11 @@ combined_dfs <- bind_rows(bwtrim_dfs, glmm_dfs)
 # ====================== #
 
 effects_combined_group <- combined_dfs %>%
-  filter(term == 'group') %>%
+  filter(
+    (term == 'group' & !(response %in% c('RT', 'ACC'))) | 
+    term == 'group:task_transition' |
+    term == 'group:congruence'
+    ) %>%
   relocate(response) %>%
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH')) %>%
@@ -3500,7 +3507,11 @@ effects_combined_group
 # ====================== #
 
 effects_combined_session <- combined_dfs %>%
-  filter(term == 'session') %>%
+  filter(
+    (term == 'session' & !(response %in% c('RT', 'ACC'))) | 
+    term == 'session:task_transition' | 
+    term == 'session:congruence'
+    ) %>%
   relocate(response) %>%
   # Adjust p-values
   mutate(p.adj = p.adjust(p.value, 'BH')) %>%
@@ -3511,7 +3522,10 @@ effects_combined_session
 # ======================== #
 
 effects_combined_int <- combined_dfs %>%
-  filter(term %in% c('group:session', 'group:session:task_transition', 'group:session:congruence')) %>%
+  filter(
+    (term == 'group:session' & !(response %in% c('RT', 'ACC'))) |
+    term %in% c('group:session:task_transition', 'group:session:congruence')
+    ) %>%
   relocate(response) %>%
   # Adjust p-values across all models' interactions
   mutate(p.adj = p.adjust(p.value, 'BH')) %>%
@@ -3523,7 +3537,10 @@ print(effects_combined_int, n = Inf)
 
 # Recreate the interaction table with the case-specific ASRS adjustment
 effects_combined_change <- combined_dfs %>%
-  filter(term %in% c('group:session', 'group:session:task_transition', 'group:session:congruence')) %>%
+  filter(
+    (term == 'group:session' & !(response %in% c('RT', 'ACC'))) |
+    term %in% c('group:session:task_transition', 'group:session:congruence')
+  ) %>%
   relocate(response) %>%
   # Case-specific adjustment 
   mutate(
