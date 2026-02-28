@@ -797,17 +797,17 @@ plot(cv_taskswitch_1a3c_rt)
 # MIXED-EFFECTS FOLLOW-UPS: RT ------------------------------------
 
 # Anova table
-car::Anova(taskswitch_1a7_rt, type = 'III')
+car::Anova(taskswitch_1a3c_rt, type = 'III')
 
 # - Switch cost RT 4-way RE*+ variance  -----------------------
 
-switch_1a7_rt <- emmeans(taskswitch_1a7_rt, 
-                         ~ group * session * task_transition,
-                         type = 'response')
-switch_1a7_rt
+switch_1a3c_rt <- emmeans(taskswitch_1a3c_rt, 
+                          ~ group * session * task_transition,
+                          type = 'response')
+switch_1a3c_rt
 
 # Tibble for plotting
-switch_tibble_1a7_rt <- switch_1a7_rt %>% 
+switch_tibble_1a3c_rt <- switch_1a3c_rt %>% 
   as_tibble() %>%
   mutate(
     session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
@@ -816,47 +816,11 @@ switch_tibble_1a7_rt <- switch_1a7_rt %>%
     group = factor(group, levels = c('CD', 'KD'))
   )
 
-# Post-hocs 3-way
-switch_3way_1a7_rt <- emmeans(taskswitch_1a7_rt,
-                              ~ session * task_transition * group) %>%
-  contrast(interaction = c('pairwise', 'pairwise', 'pairwise'))
-switch_3way_1a7_rt
-
-# Post-hocs 2-way
-switch_2way_1a7_rt <- emmeans(taskswitch_1a7_rt,
-                              ~ task_transition * session | group) %>%
-  contrast(interaction = c('pairwise', 'pairwise'))
-switch_2way_1a7_rt
-
-# Joint test of 2-way contrasts
-switch_2way_1a7_rt_joint <- test(switch_2way_1a7_rt, by = NULL, joint = TRUE)
-switch_2way_1a7_rt_joint
-
-# Session given trial type
-switch_session_1a7_rt <- emmeans(taskswitch_1a7_rt, 
-                                 ~ group * session * task_transition) %>%
-  contrast('pairwise', by = c('group', 'task_transition'), 
-                                  combine = TRUE)
-switch_session_1a7_rt
-
-# Trial type given session
-switch_trial_1a7_rt <- emmeans(taskswitch_1a7_rt, 
-                               ~ group * session * task_transition) %>% 
-  contrast('pairwise', by = c('group', 'session'), 
-                                combine = TRUE)
-switch_trial_1a7_rt
-
-# Baseline comparison
-switch_baseline_rt <- emmeans(taskswitch_1a7_rt,
-                              ~ group * task_transition | session) %>%
-  contrast(interaction = c('pairwise', 'pairwise'))
-switch_baseline_rt
-
-# Within-subject SE plot #
+# Within-subject se plot #
 # ----------------------------- #
 
-data_rt_switch_1a7_rt <- afex_plot(
-  taskswitch_1a7_rt,
+data_rt_switch_1a3c_rt <- afex_plot(
+  taskswitch_1a3c_rt,
   x = 'session',
   trace = 'task_transition',      
   panel = 'group',                
@@ -873,7 +837,7 @@ data_rt_switch_1a7_rt <- afex_plot(
 )
 
 # Adjust afex data output
-data_rt_switch_1a7_rt_adj <- data_rt_switch_1a7_rt$data %>%
+data_rt_switch_1a3c_rt_adj <- data_rt_switch_1a3c_rt$data %>%
   mutate(
     session = factor(
       session,
@@ -885,8 +849,8 @@ data_rt_switch_1a7_rt_adj <- data_rt_switch_1a7_rt$data %>%
       labels = c('Repeat', 'Switch')
     ))
 
-# Afex means for SE
-afex_means_switch_1a7_rt <- data_rt_switch_1a7_rt$means %>%
+# Afex means for se
+afex_means_switch_1a3c_rt <- data_rt_switch_1a3c_rt$means %>%
   as_tibble() %>%
   # Select only what we need to join
   dplyr::select(session, task_transition, group, SE) %>%
@@ -898,15 +862,15 @@ afex_means_switch_1a7_rt <- data_rt_switch_1a7_rt$means %>%
     group = factor(group, levels = c('CD', 'KD'))
   )
 
-# Join SEs into the main plotting data
-switch_plot_data_1a7_rt <- switch_tibble_1a7_rt %>%
-  # Drop SE from the emmeans tibble
+# Join ses into the main plotting data
+switch_plot_data_1a3c_rt <- switch_tibble_1a3c_rt %>%
+  # Drop se from the emmeans tibble
   dplyr::select(-SE) %>%
-  left_join(afex_means_switch_1a7_rt, by = c('group', 'session', 'task_transition'))
+  left_join(afex_means_switch_1a3c_rt, by = c('group', 'session', 'task_transition'))
 
 # Plot
 pos_dodge <- position_dodge(width = dodge_tsmm)
-gg_mixed_switch_rt <- ggplot(switch_plot_data_1a7_rt,
+gg_mixed_switch_rt <- ggplot(switch_plot_data_1a3c_rt,
                              aes(x = session, y = response,
                                  colour = group,
                                  linetype = task_transition,
@@ -917,7 +881,7 @@ gg_mixed_switch_rt <- ggplot(switch_plot_data_1a7_rt,
                     ymax = response + SE),
                 width = .1, position = pos_dodge) +
   geom_jitter(
-    data = data_rt_switch_1a7_rt_adj,
+    data = data_rt_switch_1a3c_rt_adj,
     aes(x = session, y = y, colour = group,
         group = interaction(group, task_transition)),
     position = position_jitterdodge(
@@ -948,13 +912,13 @@ ggsave(
 
 # - Incongruence cost RT 4-way RE*+ variance  -----------------------
 
-incongr_1a7_rt <- emmeans(taskswitch_1a7_rt, 
-                          ~ group * session * congruence,
-                          type = 'response')
-incongr_1a7_rt
+incongr_1a3c_rt <- emmeans(taskswitch_1a3c_rt, 
+                           ~ group * session * congruence,
+                           type = 'response')
+incongr_1a3c_rt
 
 # Tibble for plotting
-incongr_tibble_1a7_rt <- incongr_1a7_rt %>% 
+incongr_tibble_1a3c_rt <- incongr_1a3c_rt %>% 
   as_tibble() %>%
   mutate(
     session = factor(session, levels = c(1, 2), labels = c('Pretest', 'Posttest')),
@@ -963,11 +927,11 @@ incongr_tibble_1a7_rt <- incongr_1a7_rt %>%
     group = factor(group, levels = c('CD', 'KD'))
   )
 
-# Within-subject SE plot
+# Within-subject se plot
 # ----------------------------- #
 
-data_rt_incongr_1a7_rt <- afex_plot(
-  taskswitch_1a7_rt,
+data_rt_incongr_1a3c_rt <- afex_plot(
+  taskswitch_1a3c_rt,
   x = 'session',
   trace = 'congruence',      
   panel = 'group',                
@@ -984,7 +948,7 @@ data_rt_incongr_1a7_rt <- afex_plot(
 )
 
 # Adjust afex data output
-data_rt_incongr_1a7_rt_adj <- data_rt_incongr_1a7_rt$data %>%
+data_rt_incongr_1a3c_rt_adj <- data_rt_incongr_1a3c_rt$data %>%
   mutate(
     session = factor(
       session,
@@ -996,8 +960,8 @@ data_rt_incongr_1a7_rt_adj <- data_rt_incongr_1a7_rt$data %>%
       labels = c('Congruent', 'Incongruent')
     ))
 
-# Afex means for SE
-afex_means_incongr_1a7_rt <- data_rt_incongr_1a7_rt$means %>%
+# Afex means for se
+afex_means_incongr_1a3c_rt <- data_rt_incongr_1a3c_rt$means %>%
   as_tibble() %>%
   # Select only what we need to join
   dplyr::select(session, congruence, group, SE) %>%
@@ -1009,15 +973,15 @@ afex_means_incongr_1a7_rt <- data_rt_incongr_1a7_rt$means %>%
     group = factor(group, levels = c('CD', 'KD'))
   )
 
-# Join SEs into the main plotting data
-incongr_plot_data_1a7_rt <- incongr_tibble_1a7_rt %>%
-  # Drop SE from the emmeans tibble
+# Join ses into the main plotting data
+incongr_plot_data_1a3c_rt <- incongr_tibble_1a3c_rt %>%
+  # Drop se from the emmeans tibble
   dplyr::select(-SE) %>%
-  left_join(afex_means_incongr_1a7_rt, by = c('group', 'session', 'congruence'))
+  left_join(afex_means_incongr_1a3c_rt, by = c('group', 'session', 'congruence'))
 
 # Plot
 pos_dodge <- position_dodge(width = dodge_tsmm)
-gg_mixed_incongr_rt <- ggplot(incongr_plot_data_1a7_rt,
+gg_mixed_incongr_rt <- ggplot(incongr_plot_data_1a3c_rt,
                               aes(x = session, y = response,
                                   colour = group,
                                   linetype = congruence,
@@ -1028,7 +992,7 @@ gg_mixed_incongr_rt <- ggplot(incongr_plot_data_1a7_rt,
                     ymax = response + SE),
                 width = .1, position = pos_dodge) +
   geom_jitter(
-    data = data_rt_incongr_1a7_rt_adj,
+    data = data_rt_incongr_1a3c_rt_adj,
     aes(x = session, y = y, colour = group,
         group = interaction(group, congruence)),
     position = position_jitterdodge(
@@ -1056,7 +1020,6 @@ ggsave(
   height = 4.5,
   units = 'in'
 )
-
 # TASK SWITCHING ACC ANALYSIS ----------------
 # - 4-way RE*+ --------------
 
