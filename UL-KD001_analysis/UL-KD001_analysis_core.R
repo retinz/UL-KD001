@@ -16,7 +16,7 @@
 # --- cross-validation (DONE)
 # --- posthocs + plotting (DONE)
 # --- RT and ACC baselines (DONE)
-# --- p-value adjustments
+# --- p-value adjustments (DONE)
 
 # NOTES #
 # ===================== #
@@ -26,7 +26,7 @@
 # - glmmTMB solves the convergence issue
 # - cue transition * task transition interaction rank deficient and automatically
 # dropped by lme4 and glmmTMB (tested also with treatment contrasts - doesn't help)
-# - taskswitch_1a7_rt the best RT model
+# - taskswitch_1a3c_rt the best RT model
 # - taskswitch_2_er the best ACC model (cross-validated)
 
 # LIBRARIES #
@@ -603,10 +603,11 @@ task_switch_outliers_rt
 
 # Model
 # - doesn't converge
+# - rank deficient
 taskswitch_1_rt <- lme4::glmer(
   response_time ~ group * session * task_transition * congruence + 
     task_transition * cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
+    (session * task_transition * congruence + cue_transition | participant_id),
   data = taskswitch_rt, family = gaussian(link = 'log'))
 summary(taskswitch_1_rt)
 
@@ -615,18 +616,32 @@ summary(taskswitch_1_rt)
 taskswitch_1a1_rt <- glmmTMB::glmmTMB(
   response_time ~ group * session * task_transition * congruence + 
     task_transition * cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
+    (session * task_transition * congruence * cue_transition | participant_id),
   data = taskswitch_rt, family = gaussian(link = 'log'))
 summary(taskswitch_1a1_rt)
 
 # Different package
+# - doesn't converge
 # - no deficient ranks
 taskswitch_1a2_rt <- glmmTMB::glmmTMB(
   response_time ~ group * session * task_transition * congruence
   + cue_transition +
-  (task_transition * congruence + cue_transition | participant_id),
+    (session * task_transition * congruence * cue_transition | participant_id),
+  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)),
   data = taskswitch_rt, family = gaussian(link = 'log'))
 summary(taskswitch_1a2_rt)
+
+# Different package
+# - no deficient ranks
+# - horrible residual fit
+# - doesn't converge
+taskswitch_1a2a_rt <- glmmTMB::glmmTMB(
+  response_time ~ group * session * task_transition * congruence
+  + cue_transition +
+    (session * task_transition * congruence * cue_transition || participant_id),
+  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)),
+  data = taskswitch_rt, family = gaussian(link = 'log'))
+summary(taskswitch_1a2a_rt)
 
 # Different package
 # - gamma family
@@ -634,89 +649,68 @@ summary(taskswitch_1a2_rt)
 taskswitch_1a3_rt <- glmmTMB::glmmTMB(
   response_time ~ group * session * task_transition * congruence
   + cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
+    (session * task_transition * congruence * cue_transition | participant_id),
+  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)),
   data = taskswitch_rt, family = Gamma(link = 'log'))
 summary(taskswitch_1a3_rt)
 
-# DIAGNOSTICS: taskswitch_1a2_rt #
-# -------------------------------------- #
+# Different package
+# - horrible fit
+taskswitch_1a3a_rt <- glmmTMB::glmmTMB(
+  response_time ~ group * session * task_transition * congruence
+  + cue_transition +
+    (session * task_transition * congruence * cue_transition || participant_id),
+  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)),
+  data = taskswitch_rt, family = Gamma(link = 'log'))
+summary(taskswitch_1a3a_rt)
 
-diagnose_model(taskswitch_1a2_rt)
+# Diagnostics
+diagnose_model(taskswitch_1a3a_rt)
 
 # - 4-way RE*+ variance --------------
 
 # Get predicted values
 taskswitch_rt_pred <- taskswitch_rt %>%
-  mutate(fitted_1a2_rt = predict(taskswitch_1a2_rt))
+  mutate(fitted_1a3a_rt = predict(taskswitch_1a3a_rt))
 glimpse(taskswitch_rt_pred)
 
 # Model
-# - doesn't converge
-taskswitch_1a4_rt <- glmmTMB::glmmTMB(
+# - okay-ish fit
+# - overdispersion
+taskswitch_1a3b_rt <- glmmTMB::glmmTMB(
   response_time ~ group * session * task_transition * congruence
   + cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
-  dispformula = ~ poly(fitted_1a2_rt, 2) + session + group * task_transition,
-  data = taskswitch_rt_pred, family = gaussian(link = 'log'))
-summary(taskswitch_1a4_rt)
-
-# Model
-taskswitch_1a5_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * task_transition * congruence
-  + cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
-  dispformula = ~ session * group + task_transition,
-  data = taskswitch_rt_pred, family = gaussian(link = 'log'))
-summary(taskswitch_1a5_rt)
-
-# Model
-taskswitch_1a6_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * task_transition * congruence
-  + cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
-  dispformula = ~ session + group + task_transition,
-  data = taskswitch_rt_pred, family = gaussian(link = 'log'),
-  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)))
-summary(taskswitch_1a6_rt)
+    (session * task_transition * congruence * cue_transition || participant_id),
+  dispformula = ~ poly(fitted_1a3a_rt, 2) + session * group * task_transition * congruence + cue_transition,
+  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)),
+  data = taskswitch_rt_pred, family = Gamma(link = 'log'))
+summary(taskswitch_1a3b_rt)
 
 # Diagnostics
-diagnose_model(taskswitch_1a6_rt)
-
-# Model
-taskswitch_1a7_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * task_transition * congruence
-  + cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
-  dispformula = ~ poly(fitted_1a2_rt, 2) + session + group + task_transition,
-  data = taskswitch_rt_pred, family = gaussian(link = 'log'),
-  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)))
-summary(taskswitch_1a7_rt)
-
-# Diagnostics
-diagnose_model(taskswitch_1a7_rt)
+diagnose_model(taskswitch_1a3b_rt)
 
 # Cross-validation #
 # ----------------------- #
 
 # Cluster-based
-cv_taskswitch_1a7_rt <- cv(taskswitch_1a7_rt, 
+cv_taskswitch_1a3b_rt <- cv::cv(taskswitch_1a3b_rt, 
                          k = 5, 
                          clusterVariables = 'participant_id', 
                          ncores = n_cores,
                          reps = 10)
-summary(cv_taskswitch_1a7_rt)
-plot(cv_taskswitch_1a7_rt)
+summary(cv_taskswitch_1a3b_rt)
+plot(cv_taskswitch_1a3b_rt)
 
 # - Autocorrelation check -------------
 
 # Get model residuals
-set_simcodes(taskswitch_1a7_rt, val = 'fix')
-taskswitch_1a7_rt_res <- simulateResiduals(taskswitch_1a7_rt, plot = FALSE)
+set_simcodes(taskswitch_1a3b_rt, val = 'fix')
+taskswitch_1a3b_rt_res <- simulateResiduals(taskswitch_1a3b_rt, plot = FALSE)
 
 # Temporal autocorrelation per subject
-taskswitch_1a7_rt_autocorr <- taskswitch_rt_pred %>%
+taskswitch_1a3b_rt_autocorr <- taskswitch_rt_pred %>%
   dplyr::select(participant_id, group, session, trial_sequence) %>%
-  mutate(residual = taskswitch_1a7_rt_res$scaledResiduals) %>%
+  mutate(residual = taskswitch_1a3b_rt_res$scaledResiduals) %>%
   group_by(participant_id, group, session) %>%
   summarise(
     dw = lmtest::dwtest(residual ~ 1, order.by = trial_sequence)$statistic,
@@ -725,40 +719,40 @@ taskswitch_1a7_rt_autocorr <- taskswitch_rt_pred %>%
   ungroup()
 
 # Autocorrelation descriptives
-taskswitch_1a7_rt_autocorr_desc <- taskswitch_1a7_rt_autocorr %>%
+taskswitch_1a3b_rt_autocorr_desc <- taskswitch_1a3b_rt_autocorr %>%
   group_by(group, session) %>%
   summarise(autocorr_prop = mean(dw < 1.5 | dw > 2.5),
             mean_dw = mean(dw, na.rm = TRUE),
             sd_dw = sd(dw, na.rm = TRUE)) %>%
   ungroup()
-taskswitch_1a7_rt_autocorr_desc
+taskswitch_1a3b_rt_autocorr_desc
 
 # Plot
 max_lag <- 40
-acf_mm_1a7_rt <- taskswitch_rt_pred %>%
-  mutate(residual = taskswitch_1a7_rt_res$scaledResiduals) %>%     
+acf_mm_1a3b_rt <- taskswitch_rt_pred %>%
+  mutate(residual = taskswitch_1a3b_rt_res$scaledResiduals) %>%      
   group_by(participant_id, group, session) %>% 
   # Ensure strict temporal order before acf calculation
   arrange(trial_sequence, .by_group = TRUE) %>%
-  nest() %>%                                                     
+  nest() %>%                                                          
   mutate(acf_tbl = map(data, ~{
     ac <- acf(.x$residual, lag.max = max_lag, plot = FALSE)
     tibble(lag = as.numeric(ac$lag[-1]),                        
            acf = as.numeric(ac$acf[-1]))
   })) %>%
-  dplyr::select(-data) %>%                                       
+  dplyr::select(-data) %>%                                        
   unnest(acf_tbl) %>%
   ungroup()
 
-taskswitch_1a7_rt_summary <- acf_mm_1a7_rt %>%
+taskswitch_1a3b_rt_summary <- acf_mm_1a3b_rt %>%
   group_by(group, session, lag) %>%
   summarise(mean_acf = mean(acf, na.rm = TRUE),
             median_acf = median(acf, na.rm = TRUE),
             .groups = 'drop')
 
-ggplot(acf_mm_1a7_rt, aes(lag, acf, group = participant_id)) +
+ggplot(acf_mm_1a3b_rt, aes(lag, acf, group = participant_id)) +
   geom_line(alpha = 0.25, linewidth = 0.3) +              
-  geom_line(data = taskswitch_1a7_rt_summary,                            
+  geom_line(data = taskswitch_1a3b_rt_summary,                             
             aes(lag, mean_acf),
             inherit.aes = FALSE,
             colour = 'black', linewidth = 1) +
@@ -772,131 +766,33 @@ ggplot(acf_mm_1a7_rt, aes(lag, acf, group = participant_id)) +
 # - 4-way RE*+ variance, autocorr --------------
 
 # Model
-# - doesn't converge
-taskswitch_1a8_rt <- glmmTMB::glmmTMB(
+taskswitch_1a3c_rt <- glmmTMB::glmmTMB(
   response_time ~ group * session * task_transition * congruence
   + cue_transition +
-    (task_transition * congruence + cue_transition | participant_id) +
+    (session * task_transition * congruence * cue_transition || participant_id) +
   ou(trial_sequence_factor + 0 | participant_id:session),
-  dispformula = ~ poly(fitted_1a2_rt, 2) + session + group + task_transition,
-  data = taskswitch_rt_pred, family = gaussian(link = 'log'),
-  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)))
-summary(taskswitch_1a8_rt)
+  dispformula = ~ poly(fitted_1a3a_rt, 2) + session * group * task_transition * congruence + cue_transition,
+  control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)),
+  data = taskswitch_rt_pred, family = Gamma(link = 'log'))
+summary(taskswitch_1a3c_rt)
 
 # Diagnostics
-diagnose_model(taskswitch_1a8_rt)
+diagnose_model(taskswitch_1a3c_rt)
 
-# - 4-way RE+ ---------
+# Compare models
+anova(taskswitch_1a3c_rt, taskswitch_1a3b_rt)
 
-# Model
-# - Doesn't converge
-taskswitch_1b_rt <- lme4::glmer(
-  response_time ~ group * session * task_transition * congruence 
-    + cue_transition +
-    (task_transition + congruence + cue_transition | participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_1b_rt)
+# Cross-validation #
+# ----------------------- #
 
-# Different package
-taskswitch_1b1_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * task_transition * congruence 
-    + cue_transition +
-    (task_transition + congruence + cue_transition | participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_1b1_rt)
-
-# - 4-way RE+|| ---------
-
-# Model
-taskswitch_1c_rt <- lme4::glmer(
-  response_time ~ group * session * task_transition * congruence
-    + cue_transition +
-    (task_transition + congruence + cue_transition || participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_1c_rt)
-
-# Different package
-taskswitch_1c1_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * task_transition * congruence 
-    + cue_transition +
-    (task_transition + congruence + cue_transition || participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_1c1_rt)
-
-# - 3-way RE*+ --------
-
-# Model
-# - doesn't converge
-taskswitch_2_rt <- lme4::glmer(
-  response_time ~ group * session * (task_transition + congruence) + 
-    task_transition * congruence + cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_2_rt)
-
-# Different package
-taskswitch_2a1_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * (task_transition + congruence) + 
-    task_transition * congruence + cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_2a1_rt)
-
-# - 3-way RE** --------
-
-# Different package
-# - doesn't converge
-taskswitch_2a2_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * (task_transition + congruence) + 
-    task_transition * congruence + cue_transition +
-    (task_transition * congruence * cue_transition | participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_2a2_rt)
-
-# - 3-way RE+ --------
-
-# Model
-taskswitch_2b_rt <- lme4::glmer(
-  response_time ~ group * session * (task_transition + congruence) + 
-    task_transition * congruence + cue_transition +
-    (task_transition + congruence + cue_transition | participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_2b_rt)
-
-# Different package
-taskswitch_2b1_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * (task_transition + congruence) + 
-    task_transition * congruence + cue_transition +
-    (task_transition + congruence + cue_transition | participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_2b1_rt)
-
-# - 3-way RE+|| --------
-
-# Model
-taskswitch_2c_rt <- lme4::glmer(
-  response_time ~ group * session * (task_transition + congruence) + 
-    task_transition * congruence + cue_transition +
-    (task_transition + congruence + cue_transition || participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_2c_rt)
-
-# Different package
-taskswitch_2c1_rt <- glmmTMB::glmmTMB(
-  response_time ~ group * session * (task_transition + congruence) + 
-    task_transition * congruence + cue_transition +
-    (task_transition + congruence + cue_transition || participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_2c1_rt)
-
-# - 3-way (simpler) RE+|| --------
-
-# Model
-taskswitch_2d_rt <- lme4::glmer(
-  response_time ~ group * session * (task_transition + congruence) + cue_transition +
-    (task_transition + congruence + cue_transition || participant_id),
-  data = taskswitch_rt, family = gaussian(link = 'log'))
-summary(taskswitch_2d_rt)
+# Cluster-based
+cv_taskswitch_1a3c_rt <- cv::cv(taskswitch_1a3c_rt, 
+                                k = 5, 
+                                clusterVariables = 'participant_id', 
+                                ncores = n_cores,
+                                reps = 10)
+summary(cv_taskswitch_1a3c_rt)
+plot(cv_taskswitch_1a3c_rt)
 
 # MIXED-EFFECTS FOLLOW-UPS: RT ------------------------------------
 
@@ -1170,7 +1066,7 @@ taskswitch_1_er <- glmmTMB::glmmTMB(
   response_correct ~ 
     group * session * task_transition * congruence + 
     cue_transition +
-    (task_transition * congruence + cue_transition | participant_id),
+    (session * task_transition * congruence + cue_transition | participant_id),
   data = taskswitch_er, family = binomial(),
   control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)))
 summary(taskswitch_1_er)
@@ -1182,7 +1078,7 @@ taskswitch_2_er <- glmmTMB::glmmTMB(
   response_correct ~ 
     group * session * task_transition * congruence + 
     cue_transition +
-    (task_transition * congruence + cue_transition || participant_id),
+    (session * task_transition * congruence + cue_transition || participant_id),
   data = taskswitch_er, family = binomial(),
   control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)))
 summary(taskswitch_2_er)
@@ -1305,12 +1201,13 @@ gg_mixed_switch_acc <- ggplot(switch_plot_data_2_er,
   scale_linetype_manual(values = c(Repeat = 'solid', Switch = 'dashed'),
                         name = 'Trial Type') +
   labs(x = NULL, y = 'Mean Accuracy (%)') +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  # For synchronisation
+  scale_y_continuous(breaks = seq(70, 100, by = 5), limits = c(70, 100)) +
   theme_apa()
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'mixed_switch_acc_2_er.pdf'),
+  filename = file.path(plot_directory, 'mixed_switch_acc.pdf'),
   plot = gg_mixed_switch_acc,
   device = cairo_pdf,
   width = 6.5, 
@@ -1416,12 +1313,13 @@ gg_mixed_incongr_acc <- ggplot(incongr_plot_data_2_er,
   scale_linetype_manual(values = c(Congruent = 'solid', Incongruent = 'dashed'),
                         name = 'Trial Type') +
   labs(x = NULL, y = 'Mean Accuracy (%)') +
-  scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+  # For synchronisation
+  scale_y_continuous(breaks = seq(70, 100, by = 5), limits = c(70, 100)) +
   theme_apa()
 
 # Save plot
 ggsave(
-  filename = file.path(plot_directory, 'mixed_incongr_acc_2_er.pdf'),
+  filename = file.path(plot_directory, 'mixed_incongr_acc.pdf'),
   plot = gg_mixed_incongr_acc,
   device = cairo_pdf,
   width = 6.5, 
