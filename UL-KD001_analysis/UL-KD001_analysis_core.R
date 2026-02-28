@@ -1020,6 +1020,7 @@ ggsave(
   height = 4.5,
   units = 'in'
 )
+
 # TASK SWITCHING ACC ANALYSIS ----------------
 # - 4-way RE*+ --------------
 
@@ -1029,7 +1030,7 @@ taskswitch_1_er <- glmmTMB::glmmTMB(
   response_correct ~ 
     group * session * task_transition * congruence + 
     cue_transition +
-    (session * task_transition * congruence + cue_transition | participant_id),
+    (session * task_transition * congruence * cue_transition | participant_id),
   data = taskswitch_er, family = binomial(),
   control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)))
 summary(taskswitch_1_er)
@@ -1041,7 +1042,7 @@ taskswitch_2_er <- glmmTMB::glmmTMB(
   response_correct ~ 
     group * session * task_transition * congruence + 
     cue_transition +
-    (session * task_transition * congruence + cue_transition || participant_id),
+    (session * task_transition * congruence * cue_transition || participant_id),
   data = taskswitch_er, family = binomial(),
   control = glmmTMB::glmmTMBControl(optCtrl = list(iter.max = 10000, eval.max = 10000)))
 summary(taskswitch_2_er)
@@ -1053,7 +1054,7 @@ diagnose_model(taskswitch_2_er)
 # ----------------------- #
 
 # Cluster-based
-cv_taskswitch_2_er <- cv(taskswitch_2_er, 
+cv_taskswitch_2_er <- cv::cv(taskswitch_2_er, 
                              k = 5, 
                              clusterVariables = 'participant_id', 
                              ncores = n_cores,
@@ -1296,7 +1297,7 @@ ggsave(
 # ========= #
 
 # Grid
-taskswitch_emm_base_rt <- emmeans(taskswitch_1a7_rt, ~ group | session)
+taskswitch_emm_base_rt <- emmeans(taskswitch_1a3c_rt, ~ group | session)
 taskswitch_emm_base_rt
 
 # Comparison
