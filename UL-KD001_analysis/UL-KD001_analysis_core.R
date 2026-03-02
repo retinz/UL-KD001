@@ -137,7 +137,7 @@ taskswitch_ready <- taskswitch_data %>%
 ketones_tibble <- questionnaires_data %>%
   mutate(
     group = factor(group, levels = c('CD', 'KD')),
-    cohort = factor(cohort, levels = c('apr_24', 'sep_24', 'jan_25', 'cd_25')),
+    cohort = factor(cohort, levels = c('apr_24', 'sep_24', 'jan_25', 'cd_25'))
   ) %>%
   dplyr::select(participant_id, group, cohort, ketones_pre, starts_with('ketones_post_int_'))
 glimpse(ketones_tibble)
@@ -180,7 +180,7 @@ questionnaires_trwin <- trim_winsorise(questionnaires_long,
                                        between = 'group',
                                        id = 'participant_id',
                                        tr = 0.2)
-print(questionnaires_trwin, width = Inf)
+print(questionnaires_trwin, n = Inf, width = Inf)
 
 # DEMOGRAPHICS ---------------------------
 
@@ -1021,6 +1021,19 @@ ggsave(
   units = 'in'
 )
 
+# - Main effect of Group -----------
+
+# Main effect of Group
+switch_1a3c_group_rt <- emmeans(taskswitch_1a3c_rt, 
+                          ~ group,
+                          type = 'response')
+switch_1a3c_group_rt
+
+# Contrast
+switch_1a3c_group_contrast_rt <- switch_1a3c_group_rt %>%
+  contrast('pairwise')
+switch_1a3c_group_contrast_rt
+
 # TASK SWITCHING ACC ANALYSIS ----------------
 # - 4-way RE*+ --------------
 
@@ -1290,6 +1303,19 @@ ggsave(
   height = 4.5,
   units = 'in'
 )
+
+# - Main effect of Group ------------
+
+# Main effect of Group
+switch_2_group_acc <- emmeans(taskswitch_2_er, 
+                                ~ group,
+                                type = 'response')
+switch_2_group_acc
+
+# Contrast
+switch_2_group_contrast_acc <- switch_2_group_acc %>%
+  contrast('pairwise')
+switch_2_group_contrast_acc
 
 # TASK SWITCHING RT & ACC BASELINE --------------------------
 
@@ -1719,7 +1745,8 @@ plot(ASRS_reg$fitted.values, balanced_ASRS$ASRS_2_res)
 gg_balanced_ASRS_baseline <- ggplot(balanced_ASRS,
                                     aes(x = group,
                                         y = ASRS_1,
-                                        fill = group)) +
+                                        fill = group,
+                                        colour = group)) +
   geom_boxplot(alpha = 0.6, outlier.shape = NA) +
   geom_jitter(
     aes(fill = group, colour = group),
@@ -1784,7 +1811,7 @@ gg_res_ASRS_posttest <- ggplot(balanced_ASRS,
                                    y = ASRS_2_res,
                                    fill = group,
                                    colour = group)) +
-  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_boxplot(width = 0.4, alpha = 0.6, outlier.shape = NA) +
   geom_jitter(
     aes(fill = group, colour = group),
     width = 0.2,
@@ -1819,7 +1846,7 @@ ggsave(
   filename = file.path(plot_directory, 'res_ASRS_posttest.pdf'),
   plot = gg_res_ASRS_posttest,
   device = cairo_pdf,
-  width = 6.5, 
+  width = 4, 
   height = 4.5,
   units = 'in'
 )
@@ -1847,6 +1874,13 @@ ASRS_respost_yuenbt_eff <- yuen.effect.ci(ASRS_2_res ~ group,
                                           tr = 0.2,
                                           nboot = 100000)
 ASRS_respost_yuenbt_eff
+
+# Test against 0
+ASRS_null_KD <- WRS::trimci(balanced_ASRS %>%
+                              filter(group == 'KD') %>%
+                              dplyr::pull(ASRS_2_res),
+                            tr=0.2,alpha=0.05, null.value = 0, pr = TRUE)
+ASRS_null_KD
 
 # ASRS INATTENTION ---------------
 # - Visualise data -------------------
@@ -1955,7 +1989,7 @@ gg_ASRS_IA_without <- ggplot(questionnaires_long,
   labs(x = 'Session', y = 'ASRS INATTENTION Score', fill = 'Group', colour = 'Group') +
   scale_x_discrete(labels = c('Pretest', 'Posttest')) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
-                     limits = limits) +
+                     limits = c(0, 18)) +
   theme_apa()
 
 # Save plot
@@ -1967,8 +2001,6 @@ ggsave(
   height = 4.5,
   units = 'in'
 )
-
-
 
 # - Trimmed mixed ANOVA -----------------------
 
@@ -2350,7 +2382,7 @@ gg_ASRS_H_without <- ggplot(questionnaires_long,
   labs(x = 'Session', y = 'ASRS HYPERACTIVITY Score', fill = 'Group', colour = 'Group') +
   scale_x_discrete(labels = c('Pretest', 'Posttest')) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10),
-                     limits = limits) +
+                     limits = c(0, 18)) +
   theme_apa()
 
 # Save plot
@@ -3325,7 +3357,7 @@ bwtrim_list <- list(
 # Collect glmmTMB models
 glmm_list <- list(
   ACC = taskswitch_2_er,
-  RT = taskswitch_1a7_rt
+  RT = taskswitch_1a3c_rt
 )
 
 # Extract bwtrim results
