@@ -22,39 +22,48 @@ UL-KD001 raw data
 - rang_graph.rds: R-specific file containing all the packages and their versions 
 (graph of the environment) used by the scripts in this repository. The graph was 
 created by the 'rang' package. Currently, no renv.lock file can be created given 
-the used packages, so this .rds file is a good compromise. 
+the packages used, so this .rds file is a good compromise. 
 
 ```r
 
 # The file can be read as:
 graph <- readRDS('rang_graph.rds')
-  
-# Additionally, the specific packages can be installed as (not tested):
-pkgs <- paste0(graph$pkgs$package, '@', graph$pkgs$version)
-pak::pkg_install(pkgs)
 
-# In the future, it may be possible to run the following for more convenience:
-rang::export_renv(graph)
-rang::dockerize(graph)
+# Custom recursive function to dig out packages and versions
+extract_pkgs <- function(node) {
+  # If we hit a dataframe containing package info, paste them together
+  if (is.data.frame(node) && 'x' %in% names(node) && 'x_version' %in% names(node)) {
+    return(paste0(node$x, '@', node$x_version))
+  } else if (is.list(node)) {
+    # If it is a list, keep digging deeper
+    return(unlist(lapply(node, extract_pkgs)))
+  }
+}
 
-# Currently, the above fails. 
+# Extract everything and keep only the unique package@version strings
+pkgs <- unique(extract_pkgs(graph))
+
+# Install all packages
+pak::pkg_install(pkgs) # This particular step wasn't tested
 
 # The WRS package doesn't come from CRAN but can be downloaded from: https://github.com/nicebread/WRS. 
 
 ```
 
-The graph file was created from questionnaires_prep_pseudo.R in the following way. 
+The graph file was created in the following way. 
 
 ```r
 
 library(rang)
 
 # 1. Define the files to scan
-files_to_scan <- c('questionnaires_prep_pseudo.R', 'taskswitch_prep_pseudo.R',
-  '../UL-KD001_analysis/UL-KD001_analysis_core.R',
-  '../UL-KD001_analysis/UL-KD001_analysis_extended.R',
-  '../UL-KD001_analysis/analysis_helpers.R',
-  '../UL-KD001_analysis/UL-KD001_report.R')
+files_to_scan <- c(
+  'UL-KD001_preprocessing/questionnaires_prep_pseudo.R', 
+  'UL-KD001_preprocessing/taskswitch_prep_pseudo.R',
+  'UL-KD001_analysis/UL-KD001_analysis_core.R',
+  'UL-KD001_analysis/UL-KD001_analysis_extended.R',
+  'UL-KD001_analysis/analysis_helpers.R',
+  'UL-KD001_analysis/UL-KD001_report.R')
 
 # 2. Scan the scripts to catch all used packages
 scanned_pkgs <- unique(renv::dependencies(files_to_scan, quiet = TRUE)$Package)
@@ -83,7 +92,7 @@ graph <- rang::resolve(
 graph$r_version <- as.character(getRversion())
 
 # 7. Generate graph RDS
-saveRDS(graph, file='../rang_graph.rds')
+saveRDS(graph, file='rang_graph.rds')
 
 ```
 
