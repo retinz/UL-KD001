@@ -22,11 +22,17 @@ UL-KD001 raw data
 - rang_graph.rds: R-specific file containing all the packages and their versions 
 (graph of the environment) used by the scripts in this repository. The graph was 
 created by the 'rang' package. Currently, no renv.lock file can be created given 
-the packages used, so this .rds file is a good compromise. 
+the packages used, so this .rds file is a good compromise. The section below outlines
+how the graph file can be loaded and the packages installed.
 
 ```r
 
-# The file can be read as:
+# Install pak if it isn't already installed
+if (!requireNamespace('pak', quietly = TRUE)) {
+  install.packages('pak')
+}
+
+# Read graph file
 graph <- readRDS('rang_graph.rds')
 
 # Custom recursive function to dig out packages and versions
