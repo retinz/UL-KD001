@@ -37,6 +37,7 @@ library(readxl)
 library(writexl)
 library(ggplot2)
 library(tidyverse)
+here::i_am('.gitignore')
 source(here('UL-KD001_analysis', 'analysis_helpers.R'))
 
 # PATHS #
@@ -2286,7 +2287,7 @@ ketone_subjects <- dataset_diettext %>%
          se_ketone = ifelse(is.nan(se_ketone), NA_real_, se_ketone))
 glimpse(ketone_subjects)
 
-pal <- c(CD = '#600985', KD = '#004445')   # palette
+pal <- c(CD = '#a2bff4', KD = '#80c680')   # palette
 
 # Plot subject-level means
 ggplot(ketone_subjects, aes(x = group, y = mean_ketone, colour = group)) +
@@ -2377,82 +2378,79 @@ keto_timeseries <- dataset_diettext %>%
   ) %>%
   mutate(
     timepoint = as.integer(timepoint), # Convert timepoint to integer
-    group = factor(group, levels = c('CD', 'KD'))  # Ensure group is a factor with specific levels
+    group = factor(group, levels = c('CD', 'KD'))
   )
 
-# KD
-ggplot(keto_timeseries %>% filter(group == 'KD'),
-       aes(x = timepoint, y = ketone_level, colour = group)) +
-  
-  # Individual participant trajectories (faint)
-  geom_line(aes(group = participant_id),
-            alpha = 0.3, linewidth = 0.4) +
-  
-  # Group means
-  stat_summary(fun = mean, geom = 'line', linewidth = 1.1) +
-  stat_summary(fun = mean, geom = 'point', size = 2) +
-  
-  # ± SE error bars
-  stat_summary(fun.data = ggplot2::mean_se, geom = 'errorbar',
-               width = 0.15, linewidth = 0.6) +
-  
-  scale_colour_manual(values = pal) +
+# Define shared elements for all plots
+common_layers <- list(
+  scale_x_continuous(limits = c(1, 16), breaks = 1:16),
+  scale_y_continuous(limits = c(0, 4.5), labels = function(y) sprintf('%.0f', y)),
   labs(
     x = 'Time point',
     y = 'Ketone value (mmol/L)',
-    colour = 'Group'
-  ) +
-  geom_hline(yintercept = 0.5, linetype = 'dashed', colour = 'black') +
-  theme_minimal(base_size = 12) +
+    colour = NULL # Set to NULL to drop the 'Group' title
+  ),
+  geom_hline(yintercept = 0.5, linetype = 'dashed', colour = 'black'),
+  annotate('text', x = 16, y = 0.65, label = 'ketosis threshold', 
+           hjust = 1, size = 3, fontface = 'italic', alpha = 0.5),
+  theme_apa(),
   theme(legend.position = 'top')
+)
 
-# CD
-ggplot(keto_timeseries %>% filter(group == 'CD'),
-       aes(x = timepoint, y = ketone_level, colour = group)) +
-  
-  # Individual participant trajectories (faint)
-  geom_line(aes(group = participant_id),
-            alpha = 0.3, linewidth = 0.4) +
-  
-  # Group means
-  stat_summary(fun = mean, geom = 'line', linewidth = 1.1) +
-  stat_summary(fun = mean, geom = 'point', size = 2) +
-  
-  # ± SE error bars
-  stat_summary(fun.data = ggplot2::mean_se, geom = 'errorbar',
-               width = 0.15, linewidth = 0.6) +
-  
-  scale_colour_manual(values = pal) +
-  labs(
-    x = 'Time point',
-    y = 'Ketone value (mmol/L)',
-    colour = 'Group'
-  ) +
-  geom_hline(yintercept = 0.5, linetype = 'dashed', colour = 'black') +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = 'top')
+# Helper function for the trajectory plots
+plot_trajectory <- function(df) {
+  ggplot(df, aes(x = timepoint, y = ketone_level, colour = group)) +
+    geom_line(aes(group = participant_id), alpha = 0.25, linewidth = 0.4) +
+    stat_summary(fun = mean, geom = 'line', linewidth = 1.1) +
+    stat_summary(fun = mean, geom = 'point', size = 2) +
+    stat_summary(fun.data = mean_se, geom = 'errorbar', width = 0.15, linewidth = 0.6) +
+    # Rename the legend labels right here
+    scale_colour_manual(
+      values = pal, 
+      labels = c('CD' = 'Clean Diet (N = 27)', 'KD' = 'Ketogenic Diet (N = 30)')
+    ) +
+    common_layers
+}
 
-# Individual regression lines
-ggplot(keto_timeseries,
-       aes(x = timepoint, y = ketone_level, colour = group)) +
-  
-  # one lm line per participant
-  geom_smooth(aes(group = participant_id),
-              method  = 'lm',
-              se = FALSE,
-              linewidth = 0.6,
+# 1. KD Plot (filtering by original factor level)
+plot_kd <- plot_trajectory(keto_timeseries %>% filter(group == 'KD'))
+
+# 2. CD Plot (filtering by original factor level)
+plot_cd <- plot_trajectory(keto_timeseries %>% filter(group == 'CD'))
+
+# 3. Individual regression lines
+plot_regressions <- ggplot(keto_timeseries, aes(x = timepoint, y = ketone_level, colour = group)) +
+  geom_smooth(aes(group = participant_id), 
+              method  = 'lm', 
+              se = FALSE, 
+              linewidth = 0.6, 
               linetype = 'solid') +
-  
-  # keep your group colouring for the trajectories
-  scale_colour_manual(values = alpha(pal, 0.6)) +
-  labs(
-    x = 'Time point',
-    y = 'Ketone value (mmol/L)',
-    colour = 'Group'
+  # Rename the legend labels here too
+  scale_colour_manual(
+    values = alpha(pal, 0.6), 
+    labels = c('CD' = 'Clean Diet', 'KD' = 'Ketogenic Diet')
   ) +
-  geom_hline(yintercept = 0.5, linetype = 'dashed', colour = 'black') +
-  theme_minimal(base_size = 12) +
-  theme(legend.position = 'top')
+  common_layers
+
+# Save KD plot
+ggsave(
+  filename = file.path(plot_directory, 'ketones_kd.pdf'),
+  plot = plot_kd,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
+
+# Save CD plot
+ggsave(
+  filename = file.path(plot_directory, 'ketones_cd.pdf'),
+  plot = plot_cd,
+  device = cairo_pdf,
+  width = 6.5, 
+  height = 4.5,
+  units = 'in'
+)
 
 # GLOBAL COLUMN CLEANING ------------------------------
 
