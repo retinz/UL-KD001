@@ -18,3 +18,72 @@ assumes preprocessed data
 
 - UL-KD001_preprocessing: contains relevant files for preprocessing pseudo-anonymised
 UL-KD001 raw data
+
+- rang_graph.rds: R-specific file containing all the packages and their versions 
+(graph of the environment) used by the scripts in this repository. The graph was 
+created by the 'rang' package. Currently, no renv.lock file can be created given 
+the used packages, so this .rds file is a good compromise. 
+
+```r
+
+# The file can be read as:
+graph <- readRDS('rang_graph.rds')
+  
+# Additionally, the specific packages can be installed as (not tested):
+pkgs <- paste0(graph$pkgs$package, '@', graph$pkgs$version)
+pak::pkg_install(pkgs)
+
+# In the future, it may be possible to run the following for more convenience:
+rang::export_renv(graph)
+rang::dockerize(graph)
+
+# Currently, the above fails. 
+
+# The WRS package doesn't come from CRAN but can be downloaded from: https://github.com/nicebread/WRS. 
+
+```
+
+The graph file was created from questionnaires_prep_pseudo.R in the following way. 
+
+```r
+
+library(rang)
+
+# 1. Define the files to scan
+files_to_scan <- c('questionnaires_prep_pseudo.R', 'taskswitch_prep_pseudo.R',
+  '../UL-KD001_analysis/UL-KD001_analysis_core.R',
+  '../UL-KD001_analysis/UL-KD001_analysis_extended.R',
+  '../UL-KD001_analysis/analysis_helpers.R',
+  '../UL-KD001_analysis/UL-KD001_report.R')
+
+# 2. Scan the scripts to catch all used packages
+scanned_pkgs <- unique(renv::dependencies(files_to_scan, quiet = TRUE)$Package)
+
+# 3. Get the exact local versions for the scanned packages
+scanned_vers <- vapply(scanned_pkgs, function(pkg) as.character(packageVersion(pkg)), character(1))
+all_pkgs <- paste0(scanned_pkgs, '@', scanned_vers)
+
+# 4. Drop any packages you don't want (including base R packages)
+base_pkgs <- rownames(installed.packages(priority = 'base'))
+drop <- c('WRS', base_pkgs)
+
+# Create a regex pattern to match exactly 'PackageName@'
+pattern <- paste0('^(', paste(drop, collapse = '|'), ')@')
+keep <- !grepl(pattern, all_pkgs)
+final_pkgs <- all_pkgs[keep]
+
+# 5. Resolve the final graph
+graph <- rang::resolve(
+    pkgs = final_pkgs,
+    snapshot_date = '2026-04-17',
+    query_sysreqs = FALSE
+)
+
+# 6. Fix R version if needed
+graph$r_version <- as.character(getRversion())
+
+# 7. Generate graph RDS
+saveRDS(graph, file='../rang_graph.rds')
+
+```
+
