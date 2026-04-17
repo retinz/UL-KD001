@@ -4,20 +4,6 @@
 # The core analysis of UL-KD001 data. This script contains the most relevant analyses 
 # for the study.
 
-# TASKS #
-# ===================== #
-
-# - task-switching re-analysis:
-# --- post-error marking (DONE) and exclusions (DONE)
-# --- outlier exclusion at the trial level (DONE)
-# --- same model specification (also log-link function) (DONE)
-# --- task transition * cue transition interaction (DONE)
-# --- possible task transition * congruence interaction (DONE)
-# --- cross-validation (DONE)
-# --- posthocs + plotting (DONE)
-# --- RT and ACC baselines (DONE)
-# --- p-value adjustments (DONE)
-
 # NOTES #
 # ===================== #
 
