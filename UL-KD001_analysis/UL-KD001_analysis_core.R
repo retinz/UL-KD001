@@ -2390,7 +2390,6 @@ ASRS_H_tranova <- WRS2::bwtrim(ASRS_H ~ group * session,
 )
 ASRS_H_tranova
 
-
 # Post-hocs #
 # -------------------- #
 
@@ -3057,6 +3056,7 @@ qt_ketones <- questionnaires_long %>%
            ~ as.numeric(scale(.x, scale = FALSE))))
 glimpse(qt_ketones)
 
+# Both groups remain in the tibble
 qt_ketones_both <- questionnaires_long %>%
   pivot_wider(
     id_cols = c(participant_id, group, cohort, age),
@@ -3324,6 +3324,87 @@ tibble(x_res = x_X2_res_BMI, y_res = y_X2_res_BMI) %>%
        y = 'ASRS-2 (residuals)',
        title = 'ASRS Posttest as a Function of BMI Changes') +
   theme_minimal()
+
+# ASRS + TASK-SWITCHING CORR. -------------
+# - Prepare data ---------
+
+# RT data wide
+taskswitch_rt_wide <- taskswitch_rt %>%
+# Aggregate first
+  group_by(participant_id, group, task_transition, congruence) %>%
+  summarise(subject_mean_rt = mean(response_time, na.rm = TRUE),
+            .groups = 'drop') %>%
+  pivot_wider(names_from = c('task_transition', 'congruence'),
+              values_from = 'subject_mean_rt') %>%
+  rowwise() %>%
+  mutate(
+    switch_cost = mean(c_across(c('switch_congruent','switch_incongruent')),
+                       na.rm = TRUE) -
+      mean(c_across(c('repeat_congruent','repeat_incongruent')), na.rm = TRUE),
+    incongruence_cost = mean(c_across(c('repeat_incongruent','switch_incongruent')),
+                             na.rm = TRUE) -
+      mean(c_across(c('repeat_congruent','switch_congruent')), na.rm = TRUE),
+    average_rt = mean(c_across(c('repeat_congruent', 'repeat_incongruent', 
+                                    'switch_congruent', 'switch_incongruent')),
+                           na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# ACC data wide
+taskswitch_er_wide <- taskswitch_er %>%
+# Aggregate first
+  group_by(participant_id, group, task_transition, congruence) %>%
+  summarise(subject_mean_acc = mean(response_correct, na.rm = TRUE),
+            .groups = 'drop') %>%
+  pivot_wider(names_from = c('task_transition', 'congruence'),
+              values_from = 'subject_mean_acc') %>%
+  rowwise() %>%
+  mutate(
+    switch_cost = mean(c_across(c('switch_congruent','switch_incongruent')),
+                       na.rm = TRUE) -
+      mean(c_across(c('repeat_congruent','repeat_incongruent')), na.rm = TRUE),
+    incongruence_cost = mean(c_across(c('repeat_incongruent','switch_incongruent')),
+                             na.rm = TRUE) -
+      mean(c_across(c('repeat_congruent','switch_congruent')), na.rm = TRUE),
+    average_acc = mean(c_across(c('repeat_congruent', 'repeat_incongruent',
+                                   'switch_congruent', 'switch_incongruent')),
+                       na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# Questionnaires aggregated
+questionnaires_agg <- questionnaires_long %>%
+  group_by(participant_id, group) %>%
+  summarise(across(c(BMI, ASRS, BDI, PSQI, ASRS_IA, ASRS_H),
+            ~ mean(.x, na.rm = TRUE)),
+            .groups = 'drop')
+
+# Full dataset — RT and ACC are ground truth (fewer participants)
+data_full <- taskswitch_rt_wide %>%
+  inner_join(taskswitch_er_wide, by = c('participant_id', 'group'), 
+  suffix = c('_rt', '_acc')) %>%
+  left_join(questionnaires_agg, by = c('participant_id', 'group'))
+glimpse(data_full)
+
+# - Correlation ---------
+
+# Simple correlation matrix
+explore_corr <- correlation(data_full,
+                     select = c('ASRS',
+                     'ASRS_IA', 'ASRS_H'),
+                     select2 = c('average_rt', 'average_acc', 
+                     'switch_cost_rt', 'incongruence_cost_rt', 
+                     'switch_cost_acc', 'incongruence_cost_acc'),
+                     method = 'spearman',
+                     partial = FALSE,
+                     p_adjust = 'none') %>%
+  as_tibble() %>%
+  arrange(desc(abs(rho))) %>%
+  mutate(p_adj = p.adjust(p, method = 'BH'),
+         p = round(p, 3),
+         p_adj = round(p_adj, 3)) %>%
+  select(-c(S, CI, Method, n_Obs))
+print(explore_corr, n = Inf, width = Inf)
 
 # P-VALUE ADJUSTMENT ------------------
 
