@@ -260,7 +260,6 @@ print.diagnose_mixed_model <- function(x,
 #' fit  <- lme4::lmer(y ~ x + (1|id), data = dat)
 #' diag <- diagnose_model(fit, lme4 = TRUE)
 
-
 diagnose_model <- function(model,
                            sim_val = 'fix',
                            nsim = 250, # DHARMa default
@@ -309,7 +308,6 @@ diagnose_model <- function(model,
     uniformity_test = unif
   ))
 }
-
 
 # VISUALISE DISTRIBUTIONS ------------------
 # - Subject-level -------------------
@@ -1235,8 +1233,6 @@ regciMC_c <- function(x, y, regfun = WRS::tsreg, nboot = 599,
   
   list(regci = regci, n = nrem, n.keep = length(y))
 }
-
-
 # APA PLOTS ---------------------
 # - APA theme --------
 
